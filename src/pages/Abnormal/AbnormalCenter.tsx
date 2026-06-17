@@ -1,6 +1,6 @@
 import React, { useState, useMemo, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { AlertTriangle, CheckCircle, Clock, Filter, Search, Eye, Bell } from 'lucide-react';
+import { AlertTriangle, CheckCircle, Clock, Filter, Search, Eye, Bell, User, RotateCcw } from 'lucide-react';
 import { DataTable, Column } from '@/components/common/DataTable';
 import { StatusBadge } from '@/components/common/StatusBadge';
 import { useLabStore } from '@/store/useLabStore';
@@ -17,6 +17,8 @@ const AbnormalCenter: React.FC = () => {
   const [statusFilter, setStatusFilter] = useState<string>('all');
   const [sortKey, setSortKey] = useState<string>('createdAt');
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc');
+  const [handlingId, setHandlingId] = useState<string | null>(null);
+  const [handledRemark, setHandledRemark] = useState('');
 
   const getSampleName = useCallback((sampleId: string) => {
     return samples.find(s => s.id === sampleId)?.name || '未知样品';
@@ -46,8 +48,10 @@ const AbnormalCenter: React.FC = () => {
     if (statusFilter !== 'all') {
       if (statusFilter === 'handled') {
         result = result.filter((a) => a.handled);
+      } else if (statusFilter === 'resolved') {
+        result = result.filter((a) => a.resolved);
       } else {
-        result = result.filter((a) => !a.handled);
+        result = result.filter((a) => !a.handled && !a.resolved);
       }
     }
 
@@ -70,13 +74,19 @@ const AbnormalCenter: React.FC = () => {
     }
   };
 
-  const handleMarkHandled = (id: string) => {
-    if (!currentUser) {
+  const handleConfirmMark = () => {
+    if (!handlingId || !currentUser) {
       showToast('请先登录', 'error');
       return;
     }
-    handleAbnormalResult(id, currentUser.realName);
-    showToast('异常已处理', 'success');
+    if (!handledRemark.trim()) {
+      showToast('请填写处理说明', 'warning');
+      return;
+    }
+    handleAbnormalResult(handlingId, currentUser.realName, handledRemark.trim());
+    showToast('异常处理记录已保存', 'success');
+    setHandlingId(null);
+    setHandledRemark('');
   };
 
   const handleViewNotification = (abnormalResultId: string) => {
@@ -88,11 +98,12 @@ const AbnormalCenter: React.FC = () => {
 
   const stats = useMemo(() => ({
     total: abnormalResults.length,
-    unhandled: abnormalResults.filter(a => !a.handled).length,
-    critical: abnormalResults.filter(a => a.severity === 'critical' && !a.handled).length,
-    high: abnormalResults.filter(a => a.severity === 'high' && !a.handled).length,
-    medium: abnormalResults.filter(a => a.severity === 'medium' && !a.handled).length,
-    low: abnormalResults.filter(a => a.severity === 'low' && !a.handled).length,
+    unhandled: abnormalResults.filter(a => !a.handled && !a.resolved).length,
+    critical: abnormalResults.filter(a => a.severity === 'critical' && !a.handled && !a.resolved).length,
+    high: abnormalResults.filter(a => a.severity === 'high' && !a.handled && !a.resolved).length,
+    medium: abnormalResults.filter(a => a.severity === 'medium' && !a.handled && !a.resolved).length,
+    low: abnormalResults.filter(a => a.severity === 'low' && !a.handled && !a.resolved).length,
+    resolved: abnormalResults.filter(a => a.resolved).length,
   }), [abnormalResults]);
 
   const columns: Column<AbnormalResult>[] = [
@@ -124,30 +135,60 @@ const AbnormalCenter: React.FC = () => {
       ),
     },
     {
-      key: 'handled',
+      key: 'status',
       header: '状态',
       sortable: true,
-      render: (row) => (
-        <div className="flex items-center space-x-2">
-          {row.handled ? (
+      render: (row) => {
+        if (row.resolved) {
+          return (
+            <span className="flex items-center space-x-1 text-neutral-500 text-sm">
+              <RotateCcw size={14} />
+              <span>已恢复</span>
+            </span>
+          );
+        }
+        if (row.handled) {
+          return (
             <span className="flex items-center space-x-1 text-success-600 text-sm">
               <CheckCircle size={14} />
               <span>已处理</span>
             </span>
-          ) : (
-            <span className="flex items-center space-x-1 text-warning-600 text-sm">
-              <Clock size={14} />
-              <span>待处理</span>
-            </span>
-          )}
-        </div>
-      ),
+          );
+        }
+        return (
+          <span className="flex items-center space-x-1 text-warning-600 text-sm">
+            <Clock size={14} />
+            <span>待处理</span>
+          </span>
+        );
+      },
     },
     {
-      key: 'handledBy',
-      header: '处理人',
+      key: 'handledInfo',
+      header: '处理信息',
       render: (row) => (
-        <span className="text-neutral-600 text-sm">{row.handledBy || '-'}</span>
+        <div>
+          {row.handled ? (
+            <>
+              <div className="flex items-center space-x-1 text-sm text-neutral-700">
+                <User size={12} />
+                <span>{row.handledBy}</span>
+              </div>
+              {row.handledRemark && (
+                <p className="text-xs text-neutral-500 mt-1 line-clamp-1">说明：{row.handledRemark}</p>
+              )}
+              {row.handledAt && (
+                <p className="text-xs text-neutral-400 mt-0.5">{formatDateTime(row.handledAt)}</p>
+              )}
+            </>
+          ) : row.resolved ? (
+            <p className="text-xs text-neutral-400">
+              结果已恢复正常<br />{row.resolvedAt && formatDateTime(row.resolvedAt)}
+            </p>
+          ) : (
+            <span className="text-xs text-neutral-400">-</span>
+          )}
+        </div>
       ),
     },
     {
@@ -164,7 +205,7 @@ const AbnormalCenter: React.FC = () => {
       key: 'actions',
       header: '操作',
       align: 'center',
-      width: '140px',
+      width: '160px',
       render: (row) => (
         <div className="flex items-center justify-center space-x-1">
           <button
@@ -178,11 +219,12 @@ const AbnormalCenter: React.FC = () => {
           >
             <Eye size={16} />
           </button>
-          {!row.handled && (
+          {!row.handled && !row.resolved && (
             <button
               onClick={(e) => {
                 e.stopPropagation();
-                handleMarkHandled(row.id);
+                setHandlingId(row.id);
+                setHandledRemark('');
               }}
               className="p-2 text-neutral-400 hover:text-success-500 hover:bg-success-50 rounded-lg transition-colors"
               title="标记已处理"
@@ -252,11 +294,11 @@ const AbnormalCenter: React.FC = () => {
         <div className="bg-white rounded-xl border border-neutral-200 p-4">
           <div className="flex items-center justify-between">
             <div>
-              <p className="text-sm text-neutral-500">中等/轻微</p>
-              <p className="text-2xl font-bold text-warning-500 mt-1">{stats.medium + stats.low}</p>
+              <p className="text-sm text-neutral-500">已恢复</p>
+              <p className="text-2xl font-bold text-neutral-500 mt-1">{stats.resolved}</p>
             </div>
-            <div className="w-10 h-10 bg-warning-50/50 rounded-lg flex items-center justify-center">
-              <AlertTriangle size={20} className="text-warning-500" />
+            <div className="w-10 h-10 bg-neutral-100 rounded-lg flex items-center justify-center">
+              <RotateCcw size={20} className="text-neutral-500" />
             </div>
           </div>
         </div>
@@ -316,6 +358,7 @@ const AbnormalCenter: React.FC = () => {
                 <option value="all">全部状态</option>
                 <option value="unhandled">待处理</option>
                 <option value="handled">已处理</option>
+                <option value="resolved">已恢复</option>
               </select>
             </div>
           </div>
@@ -333,6 +376,7 @@ const AbnormalCenter: React.FC = () => {
           navigate(`/samples/${row.sampleId}`);
         }}
         rowClassName={(row) => {
+          if (row.resolved) return 'bg-neutral-50/50 opacity-70';
           if (!row.handled) {
             if (row.severity === 'critical') return 'bg-danger-50/50';
             if (row.severity === 'high') return 'bg-danger-50/30';
@@ -342,6 +386,46 @@ const AbnormalCenter: React.FC = () => {
         }}
         emptyText="暂无异常数据"
       />
+
+      {handlingId && (
+        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 animate-fade-in">
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md p-6 animate-fade-in">
+            <h3 className="text-lg font-semibold text-neutral-800 mb-4">异常处理记录</h3>
+            <p className="text-sm text-neutral-500 mb-4">
+              请填写处理说明，记录处理人、处理措施和处理结果等信息。
+            </p>
+            <div className="space-y-4">
+              <div className="space-y-1.5">
+                <label className="block text-sm font-medium text-neutral-700">
+                  处理说明 <span className="text-danger-500">*</span>
+                </label>
+                <textarea
+                  value={handledRemark}
+                  onChange={(e) => setHandledRemark(e.target.value)}
+                  rows={4}
+                  placeholder="请描述处理措施和结果..."
+                  className="w-full px-4 py-3 border border-neutral-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent transition-all resize-none"
+                />
+              </div>
+              <div className="flex space-x-3 pt-2">
+                <button
+                  onClick={() => { setHandlingId(null); setHandledRemark(''); }}
+                  className="flex-1 px-4 py-2.5 border border-neutral-300 text-neutral-700 rounded-lg hover:bg-neutral-50 transition-colors font-medium"
+                >
+                  取消
+                </button>
+                <button
+                  onClick={handleConfirmMark}
+                  className="flex-1 px-4 py-2.5 bg-success-500 text-white rounded-lg hover:bg-success-600 transition-colors font-medium flex items-center justify-center space-x-2 shadow-lg shadow-success-500/20"
+                >
+                  <CheckCircle size={16} />
+                  <span>确认处理</span>
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 import type {
-  Sample, FlowLog, Experiment, ExperimentStep, Template, Report, AbnormalResult, Notification, User, DashboardStats, ExperimentStage } from '@/types';
+  Sample, FlowLog, Experiment, ExperimentStep, Template, Report, ReportHistory, AbnormalResult, Notification, User, DashboardStats, ExperimentStage } from '@/types';
 import { getSamples, setSamples, getFlowLogs, setFlowLogs, getExperiments, setExperiments, getExperimentSteps, setExperimentSteps, getTemplates, setTemplates, getReports, setReports, getAbnormalResults, setAbnormalResults, getNotifications, setNotifications, getUsers, setUsers, getCurrentUser, setCurrentUser, isInitialized, markInitialized } from '@/utils/storage';
 import { generateId, generateTrackingNo } from '@/utils/trackingNo';
 import { getNowString, getTodayString } from '@/utils/dateFormat';
@@ -50,9 +50,11 @@ interface LabState {
   updateReport: (id: string, updates: Partial<Report>) => void;
   getReportById: (id: string) => Report | undefined;
   getReportsBySampleId: (sampleId: string) => Report[];
+  addReportHistory: (id: string, action: ReportHistory['action'], operator: string, remark?: string) => void;
 
   addAbnormalResult: (step: Omit<AbnormalResult, 'id' | 'createdAt'>) => AbnormalResult;
-  handleAbnormalResult: (id: string, handledBy: string) => void;
+  handleAbnormalResult: (id: string, handledBy: string, handledRemark?: string) => void;
+  resolveAbnormal: (experimentStepId: string) => void;
   getUnhandledAbnormalCount: () => number;
 
   addNotification: (notification: Omit<Notification, 'id' | 'sentAt'>) => Notification;
@@ -294,11 +296,35 @@ export const useLabStore = create<LabState>((set, get) => ({
       ...reportData,
       id: generateId(),
       createdAt: getNowString(),
+      history: reportData.history ?? [{
+        id: generateId(),
+        action: 'save',
+        operator: reportData.createdBy || '系统',
+        operatedAt: getNowString(),
+      }],
     };
     const reports = [...get().reports, newReport];
     setReports(reports);
     set({ reports });
     return newReport;
+  },
+
+  addReportHistory: (id, action, operator, remark) => {
+    const reports = get().reports.map(r => {
+      if (r.id !== id) return r;
+      return {
+        ...r,
+        history: [...r.history, {
+          id: generateId(),
+          action,
+          operator,
+          operatedAt: getNowString(),
+          remark,
+        }],
+      };
+    });
+    setReports(reports);
+    set({ reports });
   },
 
   updateReport: (id, updates) => {
@@ -315,9 +341,17 @@ export const useLabStore = create<LabState>((set, get) => ({
     get().reports.filter(r => r.sampleId === sampleId),
 
   addAbnormalResult: (abnData) => {
+    const existing = get().abnormalResults.find(
+      a => a.experimentStepId === abnData.experimentStepId && !a.resolved
+    );
+    if (existing) return existing;
+
+    const step = get().experimentSteps.find(s => s.id === abnData.experimentStepId);
     const newAbn: AbnormalResult = {
       ...abnData,
       id: generateId(),
+      experimentId: step?.experimentId || abnData.experimentId || '',
+      resolved: false,
       createdAt: getNowString(),
     };
     const abnormalResults = [...get().abnormalResults, newAbn];
@@ -337,9 +371,36 @@ export const useLabStore = create<LabState>((set, get) => ({
     return newAbn;
   },
 
-  handleAbnormalResult: (id, handledBy) => {
+  resolveAbnormal: (experimentStepId) => {
     const abnormalResults = get().abnormalResults.map(a =>
-      a.id === id ? { ...a, handled: true, handledBy } : a
+      a.experimentStepId === experimentStepId && !a.resolved
+        ? { ...a, resolved: true, resolvedAt: getNowString() }
+        : a
+    );
+    setAbnormalResults(abnormalResults);
+    set({ abnormalResults });
+
+    const unresolved = abnormalResults.filter(a => !a.resolved);
+    if (unresolved.length === 0) {
+      const sampleIds = new Set(abnormalResults.filter(a => a.resolved).map(a => a.sampleId));
+      sampleIds.forEach(sid => {
+        const sample = get().getSampleById(sid);
+        if (sample && sample.status === 'abnormal') {
+          get().updateSample(sid, { status: 'testing' });
+        }
+      });
+    }
+  },
+
+  handleAbnormalResult: (id, handledBy, handledRemark) => {
+    const abnormalResults = get().abnormalResults.map(a =>
+      a.id === id ? {
+        ...a,
+        handled: true,
+        handledBy,
+        handledRemark,
+        handledAt: getNowString(),
+      } : a
     );
     setAbnormalResults(abnormalResults);
     set({ abnormalResults });
@@ -401,6 +462,7 @@ export const useLabStore = create<LabState>((set, get) => ({
 
       get().addAbnormalResult({
         experimentStepId: stepId,
+        experimentId: step.experimentId,
         sampleId,
         description,
         severity,
@@ -411,6 +473,8 @@ export const useLabStore = create<LabState>((set, get) => ({
       if (sample && sample.status !== 'abnormal') {
         get().updateSample(sampleId, { status: 'abnormal' });
       }
+    } else {
+      get().resolveAbnormal(stepId);
     }
   },
 

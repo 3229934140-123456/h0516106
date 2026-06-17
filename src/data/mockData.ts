@@ -1,4 +1,4 @@
-import type { Sample, Template, User, FlowLog, Experiment, ExperimentStep, AbnormalResult, Notification, Report } from '@/types';
+import type { Sample, Template, User, FlowLog, Experiment, ExperimentStep, AbnormalResult, Notification, Report, ReportHistory } from '@/types';
 import { generateId } from '@/utils/trackingNo';
 import { getNowString, getTodayString } from '@/utils/dateFormat';
 
@@ -417,19 +417,23 @@ export const mockAbnormalResults: AbnormalResult[] = [
   {
     id: 'abn-1',
     experimentStepId: 'estep-4',
+    experimentId: 'exp-1',
     sampleId: 'sample-4',
     description: 'pH值检测结果偏低: 5.2 (参考范围: 6.5-8.5)',
     severity: 'high',
     handled: false,
+    resolved: false,
     createdAt: new Date(Date.now() - 6000000).toISOString(),
   },
   {
     id: 'abn-2',
     experimentStepId: 'estep-5',
+    experimentId: 'exp-1',
     sampleId: 'sample-4',
     description: '浊度检测结果偏高: 3.5 NTU (参考范围: ≤1 NTU)',
     severity: 'medium',
     handled: false,
+    resolved: false,
     createdAt: new Date(Date.now() - 5400000).toISOString(),
   },
 ];
@@ -466,5 +470,31 @@ export const mockReports: Report[] = [
     hasElectronicSeal: true,
     createdAt: new Date(Date.now() - 40000000).toISOString(),
     approvedAt: new Date(Date.now() - 30000000).toISOString(),
+    history: [
+      {
+        id: 'rh-1',
+        action: 'save',
+        operator: '张实验员',
+        operatedAt: new Date(Date.now() - 40000000).toISOString(),
+      },
+      {
+        id: 'rh-2',
+        action: 'submit',
+        operator: '张实验员',
+        operatedAt: new Date(Date.now() - 35000000).toISOString(),
+      },
+      {
+        id: 'rh-3',
+        action: 'approve',
+        operator: '李经理',
+        operatedAt: new Date(Date.now() - 30000000).toISOString(),
+      },
+      {
+        id: 'rh-4',
+        action: 'seal',
+        operator: '李经理',
+        operatedAt: new Date(Date.now() - 28000000).toISOString(),
+      },
+    ] as ReportHistory[],
   },
 ];

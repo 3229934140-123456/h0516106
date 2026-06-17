@@ -1,12 +1,30 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
-import { ArrowLeft, Save, Download, Share2, CheckCircle, XCircle, Stamp, Eye, Edit3, FileText } from 'lucide-react';
+import { ArrowLeft, Save, Download, Share2, CheckCircle, XCircle, Stamp, Eye, Edit3, FileText, History, User, Clock } from 'lucide-react';
 import { useLabStore } from '@/store/useLabStore';
 import { useToast } from '@/components/common/Toast';
 import { StatusBadge } from '@/components/common/StatusBadge';
 import { formatDateTime } from '@/utils/dateFormat';
 import { generateReportPDF, generateReportContent } from '@/utils/pdfGenerator';
-import type { Report } from '@/types';
+import type { Report, ReportHistory } from '@/types';
+
+const ACTION_LABELS: Record<ReportHistory['action'], string> = {
+  save: '保存报告',
+  edit: '编辑报告',
+  submit: '提交审核',
+  reject: '驳回报告',
+  approve: '审核通过',
+  seal: '加盖电子章',
+};
+
+const ACTION_COLORS: Record<ReportHistory['action'], string> = {
+  save: 'bg-neutral-100 text-neutral-600',
+  edit: 'bg-primary-100 text-primary-600',
+  submit: 'bg-primary-100 text-primary-600',
+  reject: 'bg-danger-100 text-danger-600',
+  approve: 'bg-success-100 text-success-600',
+  seal: 'bg-warning-100 text-warning-700',
+};
 
 const ReportDetail: React.FC = () => {
   const { id } = useParams<{ id: string }>();
@@ -15,6 +33,7 @@ const ReportDetail: React.FC = () => {
   const {
     getReportById,
     updateReport,
+    addReportHistory,
     getSampleById,
     getExperimentById,
     getStepsByExperimentId,
@@ -28,6 +47,9 @@ const ReportDetail: React.FC = () => {
   const [editedContent, setEditedContent] = useState('');
   const [editedTitle, setEditedTitle] = useState('');
   const [showPreview, setShowPreview] = useState(false);
+  const [showRejectModal, setShowRejectModal] = useState(false);
+  const [rejectReason, setRejectReason] = useState('');
+  const [showHistory, setShowHistory] = useState(true);
 
   useEffect(() => {
     if (id) {
@@ -56,15 +78,29 @@ const ReportDetail: React.FC = () => {
   const steps = experiment ? getStepsByExperimentId(experiment.id) : [];
   const template = experiment ? getTemplateById(experiment.templateId) : null;
 
+  const refreshReport = () => {
+    if (id) {
+      const r = getReportById(id);
+      if (r) setReport(r);
+    }
+  };
+
   const handleSave = () => {
-    if (!id) return;
+    if (!id || !currentUser) return;
     updateReport(id, {
       title: editedTitle,
       content: editedContent,
     });
-    setReport({ ...report, title: editedTitle, content: editedContent });
+    addReportHistory(id, 'save', currentUser.realName);
+    refreshReport();
     setIsEditing(false);
     showToast('报告已保存', 'success');
+  };
+
+  const handleStartEdit = () => {
+    if (!id || !currentUser) return;
+    addReportHistory(id, 'edit', currentUser.realName);
+    setIsEditing(true);
   };
 
   const handleRegenerate = () => {
@@ -75,25 +111,23 @@ const ReportDetail: React.FC = () => {
   };
 
   const handleSubmitReview = () => {
-    if (!id) return;
-    updateReport(id, { status: 'reviewing' });
-    setReport({ ...report, status: 'reviewing' });
+    if (!id || !currentUser) return;
+    updateReport(id, { status: 'reviewing', title: editedTitle, content: editedContent });
+    addReportHistory(id, 'submit', currentUser.realName);
+    refreshReport();
     showToast('报告已提交审核', 'success');
   };
 
   const handleApprove = () => {
     if (!id || !currentUser) return;
+    const now = new Date().toISOString();
     updateReport(id, {
       status: 'approved',
       approvedBy: currentUser.realName,
-      approvedAt: new Date().toISOString(),
+      approvedAt: now,
     });
-    setReport({
-      ...report,
-      status: 'approved',
-      approvedBy: currentUser.realName,
-      approvedAt: new Date().toISOString(),
-    });
+    addReportHistory(id, 'approve', currentUser.realName);
+    refreshReport();
 
     if (sample) {
       updateSampleStage(sample.id, 'review', currentUser.realName, '报告已审核通过');
@@ -102,22 +136,27 @@ const ReportDetail: React.FC = () => {
     showToast('报告已通过审核', 'success');
   };
 
-  const handleReject = () => {
-    if (!id) return;
+  const handleConfirmReject = () => {
+    if (!id || !currentUser) return;
+    if (!rejectReason.trim()) {
+      showToast('请填写驳回原因', 'warning');
+      return;
+    }
     updateReport(id, { status: 'rejected' });
-    setReport({ ...report, status: 'rejected' });
+    addReportHistory(id, 'reject', currentUser.realName, rejectReason.trim());
+    refreshReport();
+    setShowRejectModal(false);
+    setRejectReason('');
     showToast('报告已驳回', 'error');
   };
 
   const handleStamp = () => {
-    if (!id || !currentUser) return;
-    updateReport(id, { hasElectronicSeal: true });
-    
-    const newContent = generateReportContent(sample!, experiment!, steps, true);
-    updateReport(id, { content: newContent });
-    
-    setReport({ ...report, hasElectronicSeal: true, content: newContent });
+    if (!id || !currentUser || !sample || !experiment) return;
+    const newContent = generateReportContent(sample, experiment, steps, true);
+    updateReport(id, { hasElectronicSeal: true, content: newContent });
+    addReportHistory(id, 'seal', currentUser.realName);
     setEditedContent(newContent);
+    refreshReport();
     showToast('电子章已加盖', 'success');
   };
 
@@ -179,10 +218,14 @@ const ReportDetail: React.FC = () => {
     }
   };
 
-  const canEdit = report.status === 'draft' || report.status === 'rejected';
-  const canSubmitReview = report.status === 'draft' || report.status === 'rejected';
+  const canEdit = (report.status === 'draft' || report.status === 'rejected') && !report.hasElectronicSeal;
+  const canSubmitReview = (report.status === 'draft' || report.status === 'rejected') && !report.hasElectronicSeal;
   const canApprove = report.status === 'reviewing' && currentUser?.role === 'manager';
   const canStamp = report.status === 'approved' && !report.hasElectronicSeal;
+
+  const sortedHistory = [...(report.history || [])].sort(
+    (a, b) => new Date(b.operatedAt).getTime() - new Date(a.operatedAt).getTime()
+  );
 
   return (
     <div className="space-y-6 animate-fade-in">
@@ -222,7 +265,7 @@ const ReportDetail: React.FC = () => {
           </div>
         </div>
 
-        <div className="flex items-center space-x-3">
+        <div className="flex items-center space-x-3 flex-wrap">
           {isEditing ? (
             <>
               <button
@@ -247,7 +290,7 @@ const ReportDetail: React.FC = () => {
             <>
               {canEdit && (
                 <button
-                  onClick={() => setIsEditing(true)}
+                  onClick={handleStartEdit}
                   className="px-4 py-2 border border-neutral-300 text-neutral-700 rounded-lg hover:bg-neutral-50 transition-colors font-medium flex items-center space-x-2"
                 >
                   <Edit3 size={16} />
@@ -293,7 +336,7 @@ const ReportDetail: React.FC = () => {
               {canApprove && (
                 <>
                   <button
-                    onClick={handleReject}
+                    onClick={() => { setShowRejectModal(true); setRejectReason(''); }}
                     className="px-4 py-2 border border-danger-300 text-danger-600 rounded-lg hover:bg-danger-50 transition-colors font-medium flex items-center space-x-2"
                   >
                     <XCircle size={16} />
@@ -403,6 +446,51 @@ const ReportDetail: React.FC = () => {
               </div>
             </div>
           )}
+
+          <div className="bg-white rounded-xl border border-neutral-200 p-5">
+            <button
+              onClick={() => setShowHistory(!showHistory)}
+              className="w-full flex items-center justify-between font-semibold text-neutral-800"
+            >
+              <span className="flex items-center space-x-2">
+                <History size={16} className="text-primary-500" />
+                <span>审核历史</span>
+                <span className="text-xs text-neutral-400 font-normal">({sortedHistory.length})</span>
+              </span>
+              <span className="text-xs text-neutral-400">{showHistory ? '收起' : '展开'}</span>
+            </button>
+            {showHistory && (
+              <div className="mt-4 space-y-4">
+                {sortedHistory.length === 0 ? (
+                  <p className="text-sm text-neutral-400 text-center py-4">暂无操作记录</p>
+                ) : (
+                  sortedHistory.map((h) => (
+                    <div key={h.id} className="flex items-start space-x-3">
+                      <div className={`w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 ${ACTION_COLORS[h.action]}`}>
+                        <Clock size={12} />
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center space-x-2">
+                          <span className="text-sm font-medium text-neutral-800">{ACTION_LABELS[h.action]}</span>
+                        </div>
+                        <div className="flex items-center space-x-2 mt-0.5 text-xs text-neutral-500">
+                          <User size={10} />
+                          <span>{h.operator}</span>
+                          <span>·</span>
+                          <span>{formatDateTime(h.operatedAt)}</span>
+                        </div>
+                        {h.remark && (
+                          <div className="mt-2 p-2.5 bg-neutral-50 rounded-lg text-xs text-neutral-600 border border-neutral-100">
+                            {h.action === 'reject' ? '驳回原因：' : '备注：'}{h.remark}
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  ))
+                )}
+              </div>
+            )}
+          </div>
         </div>
 
         <div className="lg:col-span-3">
@@ -443,6 +531,49 @@ const ReportDetail: React.FC = () => {
           )}
         </div>
       </div>
+
+      {showRejectModal && (
+        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 animate-fade-in">
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md p-6 animate-fade-in">
+            <h3 className="text-lg font-semibold text-neutral-800 mb-2 flex items-center space-x-2">
+              <XCircle size={20} className="text-danger-500" />
+              <span>驳回报告</span>
+            </h3>
+            <p className="text-sm text-neutral-500 mb-4">
+              请填写驳回原因，以便创建人了解需要修改的内容。
+            </p>
+            <div className="space-y-4">
+              <div className="space-y-1.5">
+                <label className="block text-sm font-medium text-neutral-700">
+                  驳回原因 <span className="text-danger-500">*</span>
+                </label>
+                <textarea
+                  value={rejectReason}
+                  onChange={(e) => setRejectReason(e.target.value)}
+                  rows={4}
+                  placeholder="请详细描述驳回原因..."
+                  className="w-full px-4 py-3 border border-neutral-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-danger-500 focus:border-transparent transition-all resize-none"
+                />
+              </div>
+              <div className="flex space-x-3 pt-2">
+                <button
+                  onClick={() => { setShowRejectModal(false); setRejectReason(''); }}
+                  className="flex-1 px-4 py-2.5 border border-neutral-300 text-neutral-700 rounded-lg hover:bg-neutral-50 transition-colors font-medium"
+                >
+                  取消
+                </button>
+                <button
+                  onClick={handleConfirmReject}
+                  className="flex-1 px-4 py-2.5 bg-danger-500 text-white rounded-lg hover:bg-danger-600 transition-colors font-medium flex items-center justify-center space-x-2 shadow-lg shadow-danger-500/20"
+                >
+                  <XCircle size={16} />
+                  <span>确认驳回</span>
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

@@ -19,6 +19,7 @@ const FlowPage: React.FC = () => {
     updateSampleStage,
     currentUser,
     getFlowLogsBySampleId,
+    users,
   } = useLabStore();
 
   const [trackingNo, setTrackingNo] = useState('');
@@ -236,15 +237,20 @@ const FlowPage: React.FC = () => {
                   <div className="relative">
                     <User
                       size={18}
-                      className="absolute left-3 top-1/2 -translate-y-1/2 text-neutral-400"
+                      className="absolute left-3 top-1/2 -translate-y-1/2 text-neutral-400 pointer-events-none"
                     />
-                    <input
-                      type="text"
+                    <select
                       value={operator}
                       onChange={(e) => setOperator(e.target.value)}
-                      placeholder="请输入操作人姓名"
-                      className="w-full pl-10 pr-4 py-2.5 border border-neutral-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent transition-all"
-                    />
+                      className="w-full pl-10 pr-4 py-2.5 border border-neutral-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent transition-all bg-white appearance-none"
+                    >
+                      <option value="">请选择操作人</option>
+                      {users.filter(u => u.isActive && u.role !== 'client').map(u => (
+                        <option key={u.id} value={u.realName}>
+                          {u.realName} ({u.role === 'admin' ? '管理员' : u.role === 'operator' ? '实验员' : u.role === 'manager' ? '项目负责人' : u.role})
+                        </option>
+                      ))}
+                    </select>
                   </div>
                 </div>
 

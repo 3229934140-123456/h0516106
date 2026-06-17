@@ -1,12 +1,12 @@
 import React from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { ArrowLeft, FlaskConical, Calendar, User, Building, FileText, QrCode, Edit3, Play, Printer } from 'lucide-react';
+import { ArrowLeft, FlaskConical, Calendar, User, Building, FileText, QrCode, Edit3, Play, Printer, AlertTriangle, CheckCircle, RotateCcw } from 'lucide-react';
 import { useLabStore } from '@/store/useLabStore';
 import { StatusBadge } from '@/components/common/StatusBadge';
 import { formatDateTime } from '@/utils/dateFormat';
 import { QRCodePrint } from '@/components/common/QRCodePrint';
 import { useToast } from '@/components/common/Toast';
-import type { FlowLog, Experiment } from '@/types';
+import type { FlowLog, Experiment, AbnormalResult } from '@/types';
 import { STAGES } from '@/types';
 
 const SampleDetail: React.FC = () => {
@@ -21,6 +21,9 @@ const SampleDetail: React.FC = () => {
   const flowLogs = id ? getFlowLogsBySampleId(id) : [];
   const experiments = id ? getExperimentsBySampleId(id) : [];
   const reports = id ? getReportsBySampleId(id) : [];
+  const abnormalResults = useLabStore((state) =>
+    state.abnormalResults.filter((a: AbnormalResult) => a.sampleId === id)
+  );
 
   if (!sample) {
     return (
@@ -261,6 +264,79 @@ const SampleDetail: React.FC = () => {
               </div>
             )}
           </div>
+
+          {abnormalResults.length > 0 && (
+            <div className="bg-white rounded-xl border border-neutral-200 p-6">
+              <div className="flex items-center justify-between mb-4">
+                <h2 className="text-lg font-semibold text-neutral-800 flex items-center space-x-2">
+                  <AlertTriangle size={20} className="text-danger-500" />
+                  <span>异常记录</span>
+                </h2>
+                <StatusBadge
+                  status={abnormalResults.filter((a: AbnormalResult) => !a.handled && !a.resolved).length > 0 ? 'high' : 'low'}
+                  type="severity"
+                />
+              </div>
+              <div className="space-y-3">
+                {abnormalResults.map((abn: AbnormalResult) => (
+                  <div
+                    key={abn.id}
+                    className={`p-4 rounded-xl border ${
+                      abn.resolved
+                        ? 'bg-neutral-50 border-neutral-200 opacity-75'
+                        : abn.handled
+                        ? 'bg-success-50/40 border-success-200'
+                        : abn.severity === 'critical' || abn.severity === 'high'
+                        ? 'bg-danger-50 border-danger-200'
+                        : 'bg-warning-50 border-warning-200'
+                    }`}
+                  >
+                    <div className="flex items-start justify-between">
+                      <div className="flex-1">
+                        <div className="flex items-center space-x-2 mb-1">
+                          <StatusBadge status={abn.severity} type="severity" size="sm" />
+                          <span className="text-xs text-neutral-500">
+                            {formatDateTime(abn.createdAt)}
+                          </span>
+                          {abn.resolved ? (
+                            <span className="inline-flex items-center space-x-1 px-2 py-0.5 bg-neutral-200 text-neutral-600 text-xs rounded-full">
+                              <RotateCcw size={10} />
+                              <span>已恢复</span>
+                              {abn.resolvedAt && <span className="text-neutral-500 ml-1">· {formatDateTime(abn.resolvedAt)}</span>}
+                            </span>
+                          ) : abn.handled ? (
+                            <span className="inline-flex items-center space-x-1 px-2 py-0.5 bg-success-100 text-success-700 text-xs rounded-full">
+                              <CheckCircle size={10} />
+                              <span>已处理</span>
+                            </span>
+                          ) : (
+                            <span className="inline-flex items-center space-x-1 px-2 py-0.5 bg-danger-100 text-danger-700 text-xs rounded-full animate-pulse">
+                              <AlertTriangle size={10} />
+                              <span>待处理</span>
+                            </span>
+                          )}
+                        </div>
+                        <p className="text-sm text-neutral-800 font-medium">{abn.description}</p>
+                        {abn.handled && (
+                          <div className="mt-3 pt-3 border-t border-dashed border-neutral-300">
+                            <p className="text-xs text-neutral-500">
+                              <span className="font-medium">处理人：</span>{abn.handledBy || '-'}
+                              {abn.handledAt && <span className="ml-3">{formatDateTime(abn.handledAt)}</span>}
+                            </p>
+                            {abn.handledRemark && (
+                              <p className="text-xs text-neutral-600 mt-1">
+                                <span className="font-medium">处理说明：</span>{abn.handledRemark}
+                              </p>
+                            )}
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
         </div>
 
         <div className="space-y-6">

@@ -1,20 +1,24 @@
 import React, { useState, useMemo, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Search, Filter, Eye, FileText, Download, Share2, CheckCircle, AlertTriangle } from 'lucide-react';
+import { Search, Filter, Eye, FileText, Download, Share2, CheckCircle, AlertTriangle, X } from 'lucide-react';
 import { DataTable, Column } from '@/components/common/DataTable';
 import { StatusBadge } from '@/components/common/StatusBadge';
 import { useLabStore } from '@/store/useLabStore';
 import { formatDateTime } from '@/utils/dateFormat';
 import { generateReportPDF } from '@/utils/pdfGenerator';
+import { useToast } from '@/components/common/Toast';
 import type { Report } from '@/types';
 
 const ReportList: React.FC = () => {
   const navigate = useNavigate();
   const { reports, samples, getExperimentById, getStepsByExperimentId } = useLabStore();
+  const { showToast } = useToast();
   const [searchText, setSearchText] = useState('');
   const [statusFilter, setStatusFilter] = useState<string>('all');
   const [sortKey, setSortKey] = useState<string>('createdAt');
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc');
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [isBatchDownloading, setIsBatchDownloading] = useState(false);
 
   const getSampleName = useCallback((sampleId: string) => {
     return samples.find(s => s.id === sampleId)?.name || '未知样品';
@@ -68,8 +72,8 @@ const ReportList: React.FC = () => {
       const steps = getStepsByExperimentId(report.experimentId);
 
       if (!sample || !experiment) {
-        alert('无法找到相关样品或实验信息');
-        return;
+        showToast('无法找到相关样品或实验信息', 'error');
+        return false;
       }
 
       const tempDiv = document.createElement('div');
@@ -92,22 +96,24 @@ const ReportList: React.FC = () => {
       a.click();
       document.body.removeChild(a);
       URL.revokeObjectURL(url);
+      return true;
     } catch (err) {
       console.error('PDF generation failed:', err);
-      alert('PDF生成失败，请重试');
+      showToast(`报告《${report.title}》PDF生成失败`, 'error');
+      return false;
     }
   };
 
   const handleShare = async (report: Report) => {
     if (!report.hasElectronicSeal) {
-      alert('请先盖章后再分享报告');
+      showToast('请先盖章后再分享报告', 'warning');
       return;
     }
 
     const shareUrl = `${window.location.origin}/reports/${report.id}`;
     try {
       await navigator.clipboard.writeText(shareUrl);
-      alert(`分享链接已复制到剪贴板：\n${shareUrl}`);
+      showToast(`分享链接已复制：${shareUrl}`, 'success');
     } catch {
       const textArea = document.createElement('textarea');
       textArea.value = shareUrl;
@@ -117,8 +123,40 @@ const ReportList: React.FC = () => {
       textArea.select();
       document.execCommand('copy');
       document.body.removeChild(textArea);
-      alert(`分享链接已复制到剪贴板：\n${shareUrl}`);
+      showToast(`分享链接已复制：${shareUrl}`, 'success');
     }
+  };
+
+  const handleBatchDownload = async () => {
+    if (selectedIds.size === 0) {
+      showToast('请先选择要下载的报告', 'warning');
+      return;
+    }
+
+    const selectedReports = filteredReports.filter(r => selectedIds.has(r.id));
+    setIsBatchDownloading(true);
+
+    let successCount = 0;
+    let failureCount = 0;
+
+    for (let i = 0; i < selectedReports.length; i++) {
+      const ok = await handleDownloadPDF(selectedReports[i]);
+      if (ok) {
+        successCount++;
+      } else {
+        failureCount++;
+      }
+      if (i < selectedReports.length - 1) {
+        await new Promise(resolve => setTimeout(resolve, 300));
+      }
+    }
+
+    setIsBatchDownloading(false);
+    showToast(
+      `批量下载完成：成功 ${successCount} 个，失败 ${failureCount} 个`,
+      failureCount === 0 ? 'success' : 'warning'
+    );
+    setSelectedIds(new Set());
   };
 
   const columns: Column<Report>[] = [
@@ -320,6 +358,32 @@ const ReportList: React.FC = () => {
               </select>
             </div>
           </div>
+
+          <div className="flex items-center space-x-3">
+            {selectedIds.size > 0 ? (
+              <>
+                <span className="text-sm text-neutral-600">
+                  已选择 <span className="font-semibold text-primary-600">{selectedIds.size}</span> 项
+                </span>
+                <button
+                  onClick={() => setSelectedIds(new Set())}
+                  className="px-3 py-1.5 text-sm border border-neutral-300 text-neutral-600 rounded-lg hover:bg-neutral-50 transition-colors flex items-center space-x-1"
+                  disabled={isBatchDownloading}
+                >
+                  <X size={14} />
+                  <span>取消选择</span>
+                </button>
+                <button
+                  onClick={handleBatchDownload}
+                  disabled={isBatchDownloading}
+                  className="px-4 py-2 bg-success-500 text-white rounded-lg hover:bg-success-600 transition-colors font-medium flex items-center space-x-2 shadow-lg shadow-success-500/20 disabled:opacity-60 disabled:cursor-not-allowed"
+                >
+                  <Download size={16} />
+                  <span>{isBatchDownloading ? '下载中...' : '批量下载PDF'}</span>
+                </button>
+              </>
+            ) : null}
+          </div>
         </div>
       </div>
 
@@ -331,6 +395,9 @@ const ReportList: React.FC = () => {
         onSort={handleSort}
         onRowClick={(row) => navigate(`/reports/${row.id}`)}
         emptyText="暂无报告数据"
+        selectable
+        selectedIds={selectedIds}
+        onSelectionChange={setSelectedIds}
       />
     </div>
   );

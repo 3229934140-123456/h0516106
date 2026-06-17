@@ -22,6 +22,9 @@ interface DataTableProps<T> {
   sortKey?: string;
   sortOrder?: 'asc' | 'desc';
   onSort?: (key: string) => void;
+  selectable?: boolean;
+  selectedIds?: Set<string>;
+  onSelectionChange?: (selected: Set<string>) => void;
 }
 
 export function DataTable<T extends { id?: string }>({
@@ -35,6 +38,9 @@ export function DataTable<T extends { id?: string }>({
   sortKey,
   sortOrder,
   onSort,
+  selectable = false,
+  selectedIds,
+  onSelectionChange,
 }: DataTableProps<T>) {
   const handleSort = (key: string) => {
     if (onSort) {
@@ -42,11 +48,46 @@ export function DataTable<T extends { id?: string }>({
     }
   };
 
+  const allSelected = data.length > 0 && selectedIds ? data.every(row => row.id && selectedIds.has(row.id)) : false;
+  const someSelected = data.length > 0 && selectedIds ? data.some(row => row.id && selectedIds.has(row.id)) : false;
+
+  const toggleAll = () => {
+    if (!onSelectionChange) return;
+    if (allSelected) {
+      onSelectionChange(new Set());
+    } else {
+      onSelectionChange(new Set(data.filter(r => r.id).map(r => r.id as string)));
+    }
+  };
+
+  const toggleRow = (rowId: string, e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (!onSelectionChange || !selectedIds) return;
+    const next = new Set(selectedIds);
+    if (next.has(rowId)) {
+      next.delete(rowId);
+    } else {
+      next.add(rowId);
+    }
+    onSelectionChange(next);
+  };
+
   return (
     <div className={cn('overflow-x-auto rounded-xl border border-neutral-200 bg-white', className)}>
       <table className="w-full">
         <thead>
           <tr className="bg-neutral-50 border-b border-neutral-200">
+            {selectable && (
+              <th className="px-4 py-3 w-12">
+                <input
+                  type="checkbox"
+                  checked={allSelected}
+                  ref={(el) => { if (el) el.indeterminate = !allSelected && someSelected; }}
+                  onChange={toggleAll}
+                  className="w-4 h-4 rounded border-neutral-300 text-primary-500 focus:ring-primary-500"
+                />
+              </th>
+            )}
             {columns.map((col) => (
               <th
                 key={String(col.key)}
@@ -86,7 +127,7 @@ export function DataTable<T extends { id?: string }>({
         <tbody className="divide-y divide-neutral-100">
           {loading ? (
             <tr>
-              <td colSpan={columns.length} className="px-4 py-12 text-center">
+              <td colSpan={columns.length + (selectable ? 1 : 0)} className="px-4 py-12 text-center">
                 <div className="flex flex-col items-center space-y-3">
                   <div className="w-8 h-8 border-2 border-primary-500 border-t-transparent rounded-full animate-spin" />
                   <p className="text-sm text-neutral-500">加载中...</p>
@@ -95,7 +136,7 @@ export function DataTable<T extends { id?: string }>({
             </tr>
           ) : data.length === 0 ? (
             <tr>
-              <td colSpan={columns.length} className="px-4 py-12 text-center">
+              <td colSpan={columns.length + (selectable ? 1 : 0)} className="px-4 py-12 text-center">
                 <p className="text-neutral-500">{emptyText}</p>
               </td>
             </tr>
@@ -106,10 +147,22 @@ export function DataTable<T extends { id?: string }>({
                 className={cn(
                   'transition-colors',
                   onRowClick && 'cursor-pointer hover:bg-primary-50/50',
+                  selectedIds?.has(row.id as string) && 'bg-primary-50/30',
                   rowClassName?.(row, index)
                 )}
                 onClick={() => onRowClick?.(row, index)}
               >
+                {selectable && (
+                  <td className="px-4 py-3 w-12">
+                    <input
+                      type="checkbox"
+                      checked={selectedIds?.has(row.id as string) || false}
+                      onClick={(e) => row.id && toggleRow(row.id, e)}
+                      onChange={() => {}}
+                      className="w-4 h-4 rounded border-neutral-300 text-primary-500 focus:ring-primary-500"
+                    />
+                  </td>
+                )}
                 {columns.map((col) => (
                   <td
                     key={String(col.key)}

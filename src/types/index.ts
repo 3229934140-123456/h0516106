@@ -93,17 +93,31 @@ export interface Report {
   hasElectronicSeal: boolean;
   createdAt: string;
   approvedAt?: string;
+  history: ReportHistory[];
 }
 
 export interface AbnormalResult {
   id: string;
   experimentStepId: string;
+  experimentId: string;
   sampleId: string;
   description: string;
   severity: SeverityLevel;
   handled: boolean;
   handledBy?: string;
+  handledRemark?: string;
+  handledAt?: string;
+  resolved: boolean;
+  resolvedAt?: string;
   createdAt: string;
+}
+
+export interface ReportHistory {
+  id: string;
+  action: 'save' | 'submit' | 'reject' | 'approve' | 'seal' | 'edit';
+  operator: string;
+  operatedAt: string;
+  remark?: string;
 }
 
 export interface Notification {
