@@ -1,26 +1,56 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { ArrowLeft, FlaskConical, Calendar, User, Building, FileText, QrCode, Edit3, Play, Printer, AlertTriangle, CheckCircle, RotateCcw } from 'lucide-react';
+import { ArrowLeft, FlaskConical, Calendar, User, Building, FileText, QrCode, Edit3, Play, Printer, AlertTriangle, CheckCircle, RotateCcw, Activity, CalendarClock, Trash2, Archive } from 'lucide-react';
 import { useLabStore } from '@/store/useLabStore';
 import { StatusBadge } from '@/components/common/StatusBadge';
 import { formatDateTime } from '@/utils/dateFormat';
 import { QRCodePrint } from '@/components/common/QRCodePrint';
 import { useToast } from '@/components/common/Toast';
-import type { FlowLog, Experiment, AbnormalResult } from '@/types';
-import { STAGES } from '@/types';
+import type { FlowLog, Experiment, AbnormalResult, Equipment, SampleRetention, SampleDisposal } from '@/types';
+import { STAGES, RETENTION_STATUS_LABELS } from '@/types';
 
 const SampleDetail: React.FC = () => {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const { showToast } = useToast();
-  const { getSampleById, getFlowLogsBySampleId, getExperimentsBySampleId, getReportsBySampleId, templates } = useLabStore();
+  const {
+    getSampleById,
+    getFlowLogsBySampleId,
+    getExperimentsBySampleId,
+    getReportsBySampleId,
+    templates,
+    getEquipmentsUsedBySample,
+    getRetentionsBySampleId,
+    getDisposalsBySampleId,
+    addSampleRetention,
+    addSampleDisposal,
+    currentUser,
+  } = useLabStore();
 
-  const [showPrint, setShowPrint] = React.useState(false);
+  const [showPrint, setShowPrint] = useState(false);
+  const [showRetentionModal, setShowRetentionModal] = useState(false);
+  const [showDisposalModal, setShowDisposalModal] = useState(false);
+  const [retentionForm, setRetentionForm] = useState({
+    location: '',
+    container: '',
+    quantity: '',
+    expiryDate: '',
+    remark: '',
+  });
+  const [disposalForm, setDisposalForm] = useState({
+    disposalMethod: '',
+    witness: '',
+    remark: '',
+    retentionId: '',
+  });
 
   const sample = id ? getSampleById(id) : undefined;
   const flowLogs = id ? getFlowLogsBySampleId(id) : [];
   const experiments = id ? getExperimentsBySampleId(id) : [];
   const reports = id ? getReportsBySampleId(id) : [];
+  const usedEquipments = id ? getEquipmentsUsedBySample(id) : [];
+  const retentions = id ? getRetentionsBySampleId(id) : [];
+  const disposals = id ? getDisposalsBySampleId(id) : [];
   const abnormalResults = useLabStore((state) =>
     state.abnormalResults.filter((a: AbnormalResult) => a.sampleId === id)
   );
@@ -62,6 +92,54 @@ const SampleDetail: React.FC = () => {
       Archive: <span className="text-lg">📁</span>,
     };
     return icons[iconName] || <span className="text-lg">📋</span>;
+  };
+
+  const handleRetentionSubmit = () => {
+    if (!id || !sample || !currentUser) return;
+    if (!retentionForm.location || !retentionForm.expiryDate) {
+      showToast('请填写留样位置和到期日期', 'warning');
+      return;
+    }
+
+    const today = new Date().toISOString().split('T')[0];
+    addSampleRetention({
+      sampleId: id,
+      location: retentionForm.location,
+      container: retentionForm.container,
+      quantity: retentionForm.quantity,
+      retentionDate: today,
+      expiryDate: retentionForm.expiryDate,
+      status: 'active',
+      handler: currentUser.realName,
+      remark: retentionForm.remark,
+    });
+
+    showToast('留样登记成功', 'success');
+    setShowRetentionModal(false);
+    setRetentionForm({ location: '', container: '', quantity: '', expiryDate: '', remark: '' });
+  };
+
+  const handleDisposalSubmit = () => {
+    if (!id || !sample || !currentUser) return;
+    if (!disposalForm.disposalMethod) {
+      showToast('请填写销毁方式', 'warning');
+      return;
+    }
+
+    const today = new Date().toISOString().split('T')[0];
+    addSampleDisposal({
+      sampleId: id,
+      retentionId: disposalForm.retentionId || undefined,
+      disposalDate: today,
+      disposalMethod: disposalForm.disposalMethod,
+      handler: currentUser.realName,
+      witness: disposalForm.witness || undefined,
+      remark: disposalForm.remark,
+    });
+
+    showToast('销毁登记成功', 'success');
+    setShowDisposalModal(false);
+    setDisposalForm({ disposalMethod: '', witness: '', remark: '', retentionId: '' });
   };
 
   return (
@@ -337,6 +415,109 @@ const SampleDetail: React.FC = () => {
               </div>
             </div>
           )}
+
+          <div className="bg-white rounded-xl border border-neutral-200 p-6">
+            <div className="flex items-center justify-between mb-4">
+              <h2 className="text-lg font-semibold text-neutral-800 flex items-center space-x-2">
+                <Archive size={20} className="text-primary-500" />
+                <span>留样与销毁</span>
+              </h2>
+              <div className="flex items-center space-x-2">
+                <button
+                  onClick={() => setShowRetentionModal(true)}
+                  className="px-3 py-1.5 text-sm border border-primary-300 text-primary-600 rounded-lg hover:bg-primary-50 transition-colors flex items-center space-x-1"
+                >
+                  <Archive size={14} />
+                  <span>登记留样</span>
+                </button>
+                <button
+                  onClick={() => {
+                    if (retentions.length > 0) {
+                      setDisposalForm(prev => ({ ...prev, retentionId: retentions[0].id }));
+                    }
+                    setShowDisposalModal(true);
+                  }}
+                  className="px-3 py-1.5 text-sm border border-danger-300 text-danger-600 rounded-lg hover:bg-danger-50 transition-colors flex items-center space-x-1"
+                >
+                  <Trash2 size={14} />
+                  <span>登记销毁</span>
+                </button>
+              </div>
+            </div>
+
+            {retentions.length > 0 && (
+              <div className="mb-4">
+                <h3 className="text-sm font-medium text-neutral-700 mb-2">留样记录</h3>
+                <div className="space-y-2">
+                  {retentions.map((ret: SampleRetention) => {
+                    const isExpired = new Date(ret.expiryDate) < new Date();
+                    return (
+                      <div
+                        key={ret.id}
+                        className={`p-3 rounded-lg border ${
+                          ret.status === 'destroyed'
+                            ? 'bg-neutral-50 border-neutral-200 opacity-70'
+                            : isExpired
+                            ? 'bg-warning-50 border-warning-200'
+                            : 'bg-primary-50/30 border-primary-200'
+                        }`}
+                      >
+                        <div className="flex items-center justify-between mb-2">
+                          <span className="font-medium text-neutral-800 text-sm">{ret.location}</span>
+                          <span className={`text-xs px-2 py-0.5 rounded-full ${
+                            ret.status === 'destroyed'
+                              ? 'bg-neutral-200 text-neutral-600'
+                              : isExpired
+                              ? 'bg-warning-200 text-warning-700'
+                              : 'bg-primary-100 text-primary-700'
+                          }`}>
+                            {RETENTION_STATUS_LABELS[ret.status]}
+                            {isExpired && ret.status === 'active' && ' (已到期)'}
+                          </span>
+                        </div>
+                        <div className="text-xs text-neutral-500 space-y-1">
+                          <p>容器: {ret.container || '-'} | 数量: {ret.quantity || '-'}</p>
+                          <p>留样日期: {ret.retentionDate} | 到期日期: {ret.expiryDate}</p>
+                          <p>处理人: {ret.handler}</p>
+                          {ret.remark && <p className="text-neutral-600">备注: {ret.remark}</p>}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+
+            {disposals.length > 0 && (
+              <div>
+                <h3 className="text-sm font-medium text-neutral-700 mb-2">销毁记录</h3>
+                <div className="space-y-2">
+                  {disposals.map((disp: SampleDisposal) => (
+                    <div
+                      key={disp.id}
+                      className="p-3 rounded-lg border border-neutral-200 bg-neutral-50"
+                    >
+                      <div className="flex items-center justify-between mb-2">
+                        <span className="font-medium text-neutral-800 text-sm flex items-center space-x-1">
+                          <Trash2 size={14} className="text-neutral-500" />
+                          <span>{disp.disposalMethod}</span>
+                        </span>
+                        <span className="text-xs text-neutral-500">{disp.disposalDate}</span>
+                      </div>
+                      <div className="text-xs text-neutral-500 space-y-1">
+                        <p>销毁人: {disp.handler}{disp.witness && ` | 见证人: ${disp.witness}`}</p>
+                        {disp.remark && <p className="text-neutral-600">备注: {disp.remark}</p>}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {retentions.length === 0 && disposals.length === 0 && (
+              <p className="text-neutral-500 text-center py-8 text-sm">暂无留样和销毁记录</p>
+            )}
+          </div>
         </div>
 
         <div className="space-y-6">
@@ -396,6 +577,39 @@ const SampleDetail: React.FC = () => {
             )}
           </div>
 
+          {usedEquipments.length > 0 && (
+            <div className="bg-white rounded-xl border border-neutral-200 p-6">
+              <h3 className="font-semibold text-neutral-800 mb-4">使用仪器</h3>
+              <div className="space-y-3">
+                {usedEquipments.map((eq: Equipment) => {
+                  const isCalibrationDue = new Date(eq.calibrationDueDate) < new Date();
+                  return (
+                    <div key={eq.id} className="p-3 rounded-lg border border-neutral-100 bg-neutral-50/50">
+                      <div className="flex items-center justify-between mb-2">
+                        <div className="flex items-center space-x-2">
+                          <Activity size={14} className="text-primary-500" />
+                          <span className="font-medium text-neutral-800 text-sm">{eq.name}</span>
+                        </div>
+                        <StatusBadge status={eq.status} type="equipment" size="sm" />
+                      </div>
+                      <div className="text-xs text-neutral-500 space-y-1">
+                        <p>编号: {eq.serialNo}</p>
+                        <p>型号: {eq.model}</p>
+                        <p className={`flex items-center space-x-1 ${isCalibrationDue ? 'text-danger-500' : ''}`}>
+                          <CalendarClock size={12} />
+                          <span>
+                            校准到期: {eq.calibrationDueDate}
+                            {isCalibrationDue && ' (已到期)'}
+                          </span>
+                        </p>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+
           <div className="bg-white rounded-xl border border-neutral-200 p-6">
             <h3 className="font-semibold text-neutral-800 mb-4">追溯二维码</h3>
             <div className="flex flex-col items-center">
@@ -427,6 +641,188 @@ const SampleDetail: React.FC = () => {
           sampleName={sample.name}
           onClose={() => setShowPrint(false)}
         />
+      )}
+
+      {showRetentionModal && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 animate-fade-in">
+          <div className="bg-white rounded-2xl shadow-2xl p-6 w-[480px] max-w-[90vw] max-h-[90vh] overflow-auto animate-slide-in-right">
+            <div className="flex items-center justify-between mb-6">
+              <h3 className="text-lg font-semibold text-neutral-800">登记留样</h3>
+              <button
+                onClick={() => setShowRetentionModal(false)}
+                className="p-1.5 hover:bg-neutral-100 rounded-lg transition-colors"
+              >
+                X
+              </button>
+            </div>
+            <div className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-neutral-700 mb-1.5">
+                  留样位置 <span className="text-danger-500">*</span>
+                </label>
+                <input
+                  type="text"
+                  value={retentionForm.location}
+                  onChange={(e) => setRetentionForm(prev => ({ ...prev, location: e.target.value }))}
+                  placeholder="如：留样冷库A-03架"
+                  className="w-full px-3 py-2 border border-neutral-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent transition-all"
+                />
+              </div>
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-neutral-700 mb-1.5">
+                    容器类型
+                  </label>
+                  <input
+                    type="text"
+                    value={retentionForm.container}
+                    onChange={(e) => setRetentionForm(prev => ({ ...prev, container: e.target.value }))}
+                    placeholder="如：棕色玻璃瓶"
+                    className="w-full px-3 py-2 border border-neutral-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent transition-all"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-neutral-700 mb-1.5">
+                    留样数量
+                  </label>
+                  <input
+                    type="text"
+                    value={retentionForm.quantity}
+                    onChange={(e) => setRetentionForm(prev => ({ ...prev, quantity: e.target.value }))}
+                    placeholder="如：约200g"
+                    className="w-full px-3 py-2 border border-neutral-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent transition-all"
+                  />
+                </div>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-neutral-700 mb-1.5">
+                  到期日期 <span className="text-danger-500">*</span>
+                </label>
+                <input
+                  type="date"
+                  value={retentionForm.expiryDate}
+                  onChange={(e) => setRetentionForm(prev => ({ ...prev, expiryDate: e.target.value }))}
+                  className="w-full px-3 py-2 border border-neutral-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent transition-all"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-neutral-700 mb-1.5">
+                  备注
+                </label>
+                <textarea
+                  value={retentionForm.remark}
+                  onChange={(e) => setRetentionForm(prev => ({ ...prev, remark: e.target.value }))}
+                  rows={3}
+                  placeholder="请输入备注信息..."
+                  className="w-full px-3 py-2 border border-neutral-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent transition-all resize-none"
+                />
+              </div>
+            </div>
+            <div className="flex space-x-3 mt-6">
+              <button
+                onClick={() => setShowRetentionModal(false)}
+                className="flex-1 px-4 py-2.5 border border-neutral-300 text-neutral-700 rounded-lg hover:bg-neutral-50 transition-colors font-medium"
+              >
+                取消
+              </button>
+              <button
+                onClick={handleRetentionSubmit}
+                className="flex-1 px-4 py-2.5 bg-primary-500 text-white rounded-lg hover:bg-primary-600 transition-colors font-medium flex items-center justify-center space-x-2"
+              >
+                <Archive size={18} />
+                <span>确认登记</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {showDisposalModal && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 animate-fade-in">
+          <div className="bg-white rounded-2xl shadow-2xl p-6 w-[480px] max-w-[90vw] max-h-[90vh] overflow-auto animate-slide-in-right">
+            <div className="flex items-center justify-between mb-6">
+              <h3 className="text-lg font-semibold text-neutral-800">登记销毁</h3>
+              <button
+                onClick={() => setShowDisposalModal(false)}
+                className="p-1.5 hover:bg-neutral-100 rounded-lg transition-colors"
+              >
+                X
+              </button>
+            </div>
+            <div className="space-y-4">
+              {retentions.length > 0 && (
+                <div>
+                  <label className="block text-sm font-medium text-neutral-700 mb-1.5">
+                    关联留样
+                  </label>
+                  <select
+                    value={disposalForm.retentionId}
+                    onChange={(e) => setDisposalForm(prev => ({ ...prev, retentionId: e.target.value }))}
+                    className="w-full px-3 py-2 border border-neutral-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent transition-all bg-white"
+                  >
+                    <option value="">不关联</option>
+                    {retentions.filter(r => r.status !== 'destroyed').map((ret) => (
+                      <option key={ret.id} value={ret.id}>
+                        {ret.location} - {ret.retentionDate}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              )}
+              <div>
+                <label className="block text-sm font-medium text-neutral-700 mb-1.5">
+                  销毁方式 <span className="text-danger-500">*</span>
+                </label>
+                <input
+                  type="text"
+                  value={disposalForm.disposalMethod}
+                  onChange={(e) => setDisposalForm(prev => ({ ...prev, disposalMethod: e.target.value }))}
+                  placeholder="如：高温高压灭菌后按危废处理"
+                  className="w-full px-3 py-2 border border-neutral-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent transition-all"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-neutral-700 mb-1.5">
+                  见证人
+                </label>
+                <input
+                  type="text"
+                  value={disposalForm.witness}
+                  onChange={(e) => setDisposalForm(prev => ({ ...prev, witness: e.target.value }))}
+                  placeholder="请输入见证人姓名"
+                  className="w-full px-3 py-2 border border-neutral-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent transition-all"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-neutral-700 mb-1.5">
+                  备注
+                </label>
+                <textarea
+                  value={disposalForm.remark}
+                  onChange={(e) => setDisposalForm(prev => ({ ...prev, remark: e.target.value }))}
+                  rows={3}
+                  placeholder="请输入备注信息..."
+                  className="w-full px-3 py-2 border border-neutral-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent transition-all resize-none"
+                />
+              </div>
+            </div>
+            <div className="flex space-x-3 mt-6">
+              <button
+                onClick={() => setShowDisposalModal(false)}
+                className="flex-1 px-4 py-2.5 border border-neutral-300 text-neutral-700 rounded-lg hover:bg-neutral-50 transition-colors font-medium"
+              >
+                取消
+              </button>
+              <button
+                onClick={handleDisposalSubmit}
+                className="flex-1 px-4 py-2.5 bg-danger-500 text-white rounded-lg hover:bg-danger-600 transition-colors font-medium flex items-center justify-center space-x-2"
+              >
+                <Trash2 size={18} />
+                <span>确认销毁</span>
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );

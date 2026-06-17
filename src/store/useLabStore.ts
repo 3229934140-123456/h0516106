@@ -1,11 +1,11 @@
 import { create } from 'zustand';
 import type {
-  Sample, FlowLog, Experiment, ExperimentStep, Template, Report, ReportHistory, AbnormalResult, Notification, User, DashboardStats, ExperimentStage } from '@/types';
+  Sample, FlowLog, Experiment, ExperimentStep, Template, Report, ReportHistory, AbnormalResult, Notification, User, DashboardStats, ExperimentStage, Equipment, CalibrationRecord, ReportComment, SampleRetention, SampleDisposal } from '@/types';
 import { getSamples, setSamples, getFlowLogs, setFlowLogs, getExperiments, setExperiments, getExperimentSteps, setExperimentSteps, getTemplates, setTemplates, getReports, setReports, getAbnormalResults, setAbnormalResults, getNotifications, setNotifications, getUsers, setUsers, getCurrentUser, setCurrentUser, isInitialized, markInitialized } from '@/utils/storage';
 import { generateId, generateTrackingNo } from '@/utils/trackingNo';
 import { getNowString, getTodayString } from '@/utils/dateFormat';
 import { checkAbnormal, getSeverity, getAbnormalDescription } from '@/utils/validator';
-import { mockSamples, mockTemplates, mockUsers, mockFlowLogs, mockExperiments, mockExperimentSteps, mockAbnormalResults, mockNotifications, mockReports } from '@/data/mockData';
+import { mockSamples, mockTemplates, mockUsers, mockFlowLogs, mockExperiments, mockExperimentSteps, mockAbnormalResults, mockNotifications, mockReports, mockEquipments, mockCalibrationRecords, mockReportComments, mockSampleRetentions, mockSampleDisposals } from '@/data/mockData';
 
 interface LabState {
   samples: Sample[];
@@ -18,6 +18,11 @@ interface LabState {
   notifications: Notification[];
   users: User[];
   currentUser: User | null;
+  equipments: Equipment[];
+  calibrationRecords: CalibrationRecord[];
+  reportComments: ReportComment[];
+  sampleRetentions: SampleRetention[];
+  sampleDisposals: SampleDisposal[];
   loading: boolean;
   initialized: boolean;
 
@@ -52,6 +57,10 @@ interface LabState {
   getReportsBySampleId: (sampleId: string) => Report[];
   addReportHistory: (id: string, action: ReportHistory['action'], operator: string, remark?: string) => void;
 
+  addReportComment: (reportId: string, authorId: string, authorName: string, content: string) => ReportComment;
+  resolveReportComment: (commentId: string, resolvedBy: string, resolveRemark?: string) => void;
+  getCommentsByReportId: (reportId: string) => ReportComment[];
+
   addAbnormalResult: (step: Omit<AbnormalResult, 'id' | 'createdAt'>) => AbnormalResult;
   handleAbnormalResult: (id: string, handledBy: string, handledRemark?: string) => void;
   resolveAbnormal: (experimentStepId: string) => void;
@@ -60,6 +69,18 @@ interface LabState {
   addNotification: (notification: Omit<Notification, 'id' | 'sentAt'>) => Notification;
   markNotificationRead: (id: string) => void;
   getUnreadNotificationCount: () => number;
+
+  getEquipmentById: (id: string) => Equipment | undefined;
+  getEquipmentBySerialNo: (serialNo: string) => Equipment | undefined;
+  getCalibrationRecordsByEquipmentId: (equipmentId: string) => CalibrationRecord[];
+  getEquipmentsUsedBySample: (sampleId: string) => Equipment[];
+
+  addSampleRetention: (retention: Omit<SampleRetention, 'id'>) => SampleRetention;
+  updateSampleRetention: (id: string, updates: Partial<SampleRetention>) => void;
+  getRetentionsBySampleId: (sampleId: string) => SampleRetention[];
+
+  addSampleDisposal: (disposal: Omit<SampleDisposal, 'id'>) => SampleDisposal;
+  getDisposalsBySampleId: (sampleId: string) => SampleDisposal[];
 
   checkAndCreateAbnormal: (stepId: string, result: string, templateStepId: string, sampleId: string) => void;
   createExperimentFromTemplate: (templateId: string, sampleId: string, title: string, operator: string) => { experiment: Experiment; steps: ExperimentStep[] };
@@ -76,6 +97,11 @@ export const useLabStore = create<LabState>((set, get) => ({
   notifications: [],
   users: [],
   currentUser: null,
+  equipments: [],
+  calibrationRecords: [],
+  reportComments: [],
+  sampleRetentions: [],
+  sampleDisposals: [],
   loading: false,
   initialized: false,
 
@@ -92,6 +118,11 @@ export const useLabStore = create<LabState>((set, get) => ({
         notifications: getNotifications(),
         users: getUsers(),
         currentUser: getCurrentUser(),
+        equipments: mockEquipments,
+        calibrationRecords: mockCalibrationRecords,
+        reportComments: mockReportComments,
+        sampleRetentions: mockSampleRetentions,
+        sampleDisposals: mockSampleDisposals,
         initialized: true,
       });
       return;
@@ -123,6 +154,11 @@ export const useLabStore = create<LabState>((set, get) => ({
       notifications: mockNotifications,
       users: mockUsers,
       currentUser: mockUsers[1],
+      equipments: mockEquipments,
+      calibrationRecords: mockCalibrationRecords,
+      reportComments: mockReportComments,
+      sampleRetentions: mockSampleRetentions,
+      sampleDisposals: mockSampleDisposals,
       loading: false,
       initialized: true,
     });
@@ -327,6 +363,39 @@ export const useLabStore = create<LabState>((set, get) => ({
     set({ reports });
   },
 
+  addReportComment: (reportId, authorId, authorName, content) => {
+    const newComment: ReportComment = {
+      id: generateId(),
+      reportId,
+      authorId,
+      authorName,
+      content,
+      resolved: false,
+      createdAt: getNowString(),
+    };
+    const reportComments = [...get().reportComments, newComment];
+    set({ reportComments });
+    return newComment;
+  },
+
+  resolveReportComment: (commentId, resolvedBy, resolveRemark) => {
+    const reportComments = get().reportComments.map(c =>
+      c.id === commentId ? {
+        ...c,
+        resolved: true,
+        resolvedBy,
+        resolvedAt: getNowString(),
+        resolveRemark,
+      } : c
+    );
+    set({ reportComments });
+  },
+
+  getCommentsByReportId: (reportId) =>
+    get().reportComments.filter(c => c.reportId === reportId).sort(
+      (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+    ),
+
   updateReport: (id, updates) => {
     const reports = get().reports.map(r =>
       r.id === id ? { ...r, ...updates } : r
@@ -344,7 +413,19 @@ export const useLabStore = create<LabState>((set, get) => ({
     const existing = get().abnormalResults.find(
       a => a.experimentStepId === abnData.experimentStepId && !a.resolved
     );
-    if (existing) return existing;
+    if (existing) {
+      const abnormalResults = get().abnormalResults.map(a =>
+        a.id === existing.id ? {
+          ...a,
+          description: abnData.description,
+          severity: abnData.severity,
+          updatedAt: getNowString(),
+        } : a
+      );
+      setAbnormalResults(abnormalResults);
+      set({ abnormalResults });
+      return { ...existing, description: abnData.description, severity: abnData.severity };
+    }
 
     const step = get().experimentSteps.find(s => s.id === abnData.experimentStepId);
     const newAbn: AbnormalResult = {
@@ -380,16 +461,21 @@ export const useLabStore = create<LabState>((set, get) => ({
     setAbnormalResults(abnormalResults);
     set({ abnormalResults });
 
-    const unresolved = abnormalResults.filter(a => !a.resolved);
-    if (unresolved.length === 0) {
-      const sampleIds = new Set(abnormalResults.filter(a => a.resolved).map(a => a.sampleId));
-      sampleIds.forEach(sid => {
+    const sampleIds = new Set(
+      abnormalResults
+        .filter(a => a.experimentStepId === experimentStepId)
+        .map(a => a.sampleId)
+    );
+
+    sampleIds.forEach(sid => {
+      const sampleAbnormals = abnormalResults.filter(a => a.sampleId === sid && !a.resolved);
+      if (sampleAbnormals.length === 0) {
         const sample = get().getSampleById(sid);
         if (sample && sample.status === 'abnormal') {
           get().updateSample(sid, { status: 'testing' });
         }
-      });
-    }
+      }
+    });
   },
 
   handleAbnormalResult: (id, handledBy, handledRemark) => {
@@ -443,6 +529,76 @@ export const useLabStore = create<LabState>((set, get) => ({
   getUnreadNotificationCount: () =>
     get().notifications.filter(n => n.status === 'sent').length,
 
+  getEquipmentById: (id) => get().equipments.find(e => e.id === id),
+
+  getEquipmentBySerialNo: (serialNo) => get().equipments.find(e => e.serialNo === serialNo),
+
+  getCalibrationRecordsByEquipmentId: (equipmentId) =>
+    get().calibrationRecords.filter(r => r.equipmentId === equipmentId).sort(
+      (a, b) => new Date(b.calibratedAt).getTime() - new Date(a.calibratedAt).getTime()
+    ),
+
+  getEquipmentsUsedBySample: (sampleId) => {
+    const experiments = get().getExperimentsBySampleId(sampleId);
+    const experimentIds = experiments.map(e => e.id);
+    const steps = get().experimentSteps.filter(s => experimentIds.includes(s.experimentId) && s.instrumentNo);
+    const serialNos = new Set(steps.map(s => s.instrumentNo));
+    return get().equipments.filter(e => serialNos.has(e.serialNo));
+  },
+
+  addSampleRetention: (retentionData) => {
+    const newRetention: SampleRetention = {
+      ...retentionData,
+      id: generateId(),
+    };
+    const sampleRetentions = [...get().sampleRetentions, newRetention];
+    set({ sampleRetentions });
+
+    const sample = get().getSampleById(retentionData.sampleId);
+    if (sample && sample.status !== 'retained') {
+      get().updateSample(retentionData.sampleId, { status: 'retained' });
+    }
+
+    return newRetention;
+  },
+
+  updateSampleRetention: (id, updates) => {
+    const sampleRetentions = get().sampleRetentions.map(r =>
+      r.id === id ? { ...r, ...updates } : r
+    );
+    set({ sampleRetentions });
+  },
+
+  getRetentionsBySampleId: (sampleId) =>
+    get().sampleRetentions.filter(r => r.sampleId === sampleId).sort(
+      (a, b) => new Date(b.retentionDate).getTime() - new Date(a.retentionDate).getTime()
+    ),
+
+  addSampleDisposal: (disposalData) => {
+    const newDisposal: SampleDisposal = {
+      ...disposalData,
+      id: generateId(),
+    };
+    const sampleDisposals = [...get().sampleDisposals, newDisposal];
+    set({ sampleDisposals });
+
+    const sample = get().getSampleById(disposalData.sampleId);
+    if (sample && sample.status !== 'destroyed') {
+      get().updateSample(disposalData.sampleId, { status: 'destroyed' });
+    }
+
+    if (disposalData.retentionId) {
+      get().updateSampleRetention(disposalData.retentionId, { status: 'destroyed' });
+    }
+
+    return newDisposal;
+  },
+
+  getDisposalsBySampleId: (sampleId) =>
+    get().sampleDisposals.filter(d => d.sampleId === sampleId).sort(
+      (a, b) => new Date(b.disposalDate).getTime() - new Date(a.disposalDate).getTime()
+    ),
+
   checkAndCreateAbnormal: (stepId, result, templateStepId, sampleId) => {
     const step = get().experimentSteps.find(s => s.id === stepId);
     const template = get().templates.find(t =>
@@ -467,6 +623,7 @@ export const useLabStore = create<LabState>((set, get) => ({
         description,
         severity,
         handled: false,
+        resolved: false,
       });
 
       const sample = get().getSampleById(sampleId);

@@ -1,6 +1,6 @@
 import React, { useState, useMemo, useEffect } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
-import { ArrowLeft, Save, CheckCircle, AlertTriangle, Clock, User, FlaskConical, SaveAll, ChevronDown, ChevronUp } from 'lucide-react';
+import { ArrowLeft, Save, CheckCircle, AlertTriangle, Clock, User, FlaskConical, SaveAll, ChevronDown, ChevronUp, Activity, CalendarClock } from 'lucide-react';
 import { useLabStore } from '@/store/useLabStore';
 import { useToast } from '@/components/common/Toast';
 import { useAutoSave } from '@/hooks/useAutoSave';
@@ -8,7 +8,8 @@ import { StatusBadge } from '@/components/common/StatusBadge';
 import { formatDateTime } from '@/utils/dateFormat';
 import { generateReportContent } from '@/utils/pdfGenerator';
 import { checkAbnormal } from '@/utils/validator';
-import type { ExperimentStep, TemplateStep } from '@/types';
+import { EQUIPMENT_STATUS_LABELS } from '@/types';
+import type { ExperimentStep, TemplateStep, Equipment } from '@/types';
 
 const ExperimentDetail: React.FC = () => {
   const { id } = useParams<{ id: string }>();
@@ -24,6 +25,8 @@ const ExperimentDetail: React.FC = () => {
     checkAndCreateAbnormal,
     addReport,
     currentUser,
+    equipments,
+    getEquipmentBySerialNo,
   } = useLabStore();
 
   const [expandedSteps, setExpandedSteps] = useState<Set<string>>(new Set());
@@ -138,6 +141,7 @@ const ExperimentDetail: React.FC = () => {
         status: 'draft',
         createdBy: currentUser.realName,
         hasElectronicSeal: false,
+        history: [],
       });
     }
 
@@ -320,17 +324,66 @@ const ExperimentDetail: React.FC = () => {
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
                           <div className="space-y-1.5">
                             <label className="block text-sm font-medium text-neutral-700">
-                              仪器编号
+                              仪器选择
                               {templateStep?.requiredInstrument && <span className="text-danger-500"> *</span>}
                             </label>
-                            <input
-                              type="text"
+                            <select
                               value={step.instrumentNo}
                               onChange={(e) => saveStep(step.id, { instrumentNo: e.target.value })}
                               disabled={step.completed}
-                              placeholder="请输入仪器编号"
-                              className="w-full px-3 py-2 border border-neutral-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent transition-all disabled:bg-neutral-50 disabled:text-neutral-500"
-                            />
+                              className="w-full px-3 py-2 border border-neutral-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent transition-all disabled:bg-neutral-50 disabled:text-neutral-500 bg-white"
+                            >
+                              <option value="">请选择仪器</option>
+                              {equipments.map((eq) => (
+                                <option key={eq.id} value={eq.serialNo}>
+                                  [{eq.serialNo}] {eq.name} ({EQUIPMENT_STATUS_LABELS[eq.status]})
+                                </option>
+                              ))}
+                            </select>
+                            {step.instrumentNo && (() => {
+                              const eq = getEquipmentBySerialNo(step.instrumentNo);
+                              if (!eq) return null;
+                              const isCalibrationDue = new Date(eq.calibrationDueDate) < new Date();
+                              const daysUntilDue = Math.ceil(
+                                (new Date(eq.calibrationDueDate).getTime() - new Date().getTime()) / (1000 * 60 * 60 * 24)
+                              );
+                              return (
+                                <div className={`mt-2 p-3 rounded-lg text-xs space-y-1 ${
+                                  isCalibrationDue ? 'bg-danger-50 border border-danger-200' :
+                                  eq.status === 'in_use' ? 'bg-primary-50 border border-primary-200' :
+                                  eq.status === 'maintenance' ? 'bg-warning-50 border border-warning-200' :
+                                  'bg-neutral-50 border border-neutral-200'
+                                }`}>
+                                  <div className="flex items-center justify-between">
+                                    <span className="font-medium text-neutral-700">{eq.name} - {eq.model}</span>
+                                    <StatusBadge
+                                      status={eq.status}
+                                      type="equipment"
+                                      size="sm"
+                                    />
+                                  </div>
+                                  <div className="text-neutral-600 flex items-center space-x-1">
+                                    <Activity size={12} />
+                                    <span>位置: {eq.location}</span>
+                                  </div>
+                                  <div className={`flex items-center space-x-1 ${isCalibrationDue ? 'text-danger-600' : 'text-neutral-600'}`}>
+                                    <CalendarClock size={12} />
+                                    <span>
+                                      上次校准: {eq.lastCalibrationDate}
+                                      {isCalibrationDue
+                                        ? ' (已到期!)'
+                                        : ` (还有${daysUntilDue}天到期)`}
+                                    </span>
+                                  </div>
+                                  {eq.status === 'in_use' && eq.currentExperimentId && eq.currentExperimentId !== experiment?.id && (
+                                    <div className="text-warning-600 flex items-center space-x-1">
+                                      <AlertTriangle size={12} />
+                                      <span>注意：该仪器当前正在其他实验中使用</span>
+                                    </div>
+                                  )}
+                                </div>
+                              );
+                            })()}
                           </div>
 
                           {templateStep?.referenceMin !== undefined || templateStep?.referenceMax !== undefined ? (

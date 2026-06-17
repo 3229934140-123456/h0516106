@@ -1,11 +1,11 @@
 import React from 'react';
 import { cn } from '@/lib/utils';
-import type { SampleStatus, SeverityLevel, ExperimentStatus, ReportStatus } from '@/types';
-import { SAMPLE_STATUS_LABELS, SEVERITY_LABELS } from '@/types';
+import type { SampleStatus, SeverityLevel, ExperimentStatus, ReportStatus, EquipmentStatus } from '@/types';
+import { SAMPLE_STATUS_LABELS, SEVERITY_LABELS, EQUIPMENT_STATUS_LABELS } from '@/types';
 
 interface StatusBadgeProps {
   status: string;
-  type?: 'sample' | 'severity' | 'experiment' | 'report';
+  type?: 'sample' | 'severity' | 'experiment' | 'report' | 'equipment';
   size?: 'sm' | 'md';
   className?: string;
 }
@@ -17,6 +17,8 @@ const statusStyles: Record<string, Record<string, string>> = {
     completed: 'bg-success-50 text-success-600 border-success-200',
     abnormal: 'bg-danger-50 text-danger-600 border-danger-200 animate-pulse-slow',
     archived: 'bg-neutral-100 text-neutral-500 border-neutral-200',
+    retained: 'bg-info-50 text-info-600 border-info-200',
+    destroyed: 'bg-neutral-100 text-neutral-500 border-neutral-200',
   },
   severity: {
     low: 'bg-warning-50 text-warning-600 border-warning-200',
@@ -35,6 +37,12 @@ const statusStyles: Record<string, Record<string, string>> = {
     approved: 'bg-success-50 text-success-600 border-success-200',
     rejected: 'bg-danger-50 text-danger-600 border-danger-200',
   },
+  equipment: {
+    available: 'bg-success-50 text-success-600 border-success-200',
+    in_use: 'bg-primary-50 text-primary-600 border-primary-200',
+    maintenance: 'bg-warning-50 text-warning-600 border-warning-200',
+    calibration_due: 'bg-danger-50 text-danger-600 border-danger-200',
+  },
 };
 
 const getStatusLabel = (status: string, type: string): string => {
@@ -47,6 +55,8 @@ const getStatusLabel = (status: string, type: string): string => {
       return { draft: '草稿', in_progress: '进行中', completed: '已完成' }[status as ExperimentStatus] || status;
     case 'report':
       return { draft: '草稿', reviewing: '审核中', approved: '已通过', rejected: '已驳回' }[status as ReportStatus] || status;
+    case 'equipment':
+      return EQUIPMENT_STATUS_LABELS[status as EquipmentStatus] || status;
     default:
       return status;
   }
@@ -76,6 +86,8 @@ export const StatusBadge: React.FC<StatusBadgeProps> = ({
         type === 'sample' && status === 'testing' && 'bg-primary-500',
         type === 'sample' && status === 'completed' && 'bg-success-500',
         type === 'sample' && status === 'abnormal' && 'bg-danger-500',
+        type === 'sample' && status === 'retained' && 'bg-info-500',
+        type === 'sample' && status === 'destroyed' && 'bg-neutral-400',
         type === 'severity' && status === 'low' && 'bg-warning-500',
         type === 'severity' && status === 'medium' && 'bg-orange-500',
         type === 'severity' && status === 'high' && 'bg-danger-500',
@@ -84,6 +96,10 @@ export const StatusBadge: React.FC<StatusBadgeProps> = ({
         type === 'experiment' && status === 'completed' && 'bg-success-500',
         type === 'report' && status === 'approved' && 'bg-success-500',
         type === 'report' && status === 'rejected' && 'bg-danger-500',
+        type === 'equipment' && status === 'available' && 'bg-success-500',
+        type === 'equipment' && status === 'in_use' && 'bg-primary-500',
+        type === 'equipment' && status === 'maintenance' && 'bg-warning-500',
+        type === 'equipment' && status === 'calibration_due' && 'bg-danger-500',
       )} />
       {label}
     </span>

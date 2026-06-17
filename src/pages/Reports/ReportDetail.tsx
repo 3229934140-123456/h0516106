@@ -1,12 +1,12 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
-import { ArrowLeft, Save, Download, Share2, CheckCircle, XCircle, Stamp, Eye, Edit3, FileText, History, User, Clock } from 'lucide-react';
+import { ArrowLeft, Save, Download, Share2, CheckCircle, XCircle, Stamp, Eye, Edit3, FileText, History, User, Clock, MessageSquare, CheckCircle2 } from 'lucide-react';
 import { useLabStore } from '@/store/useLabStore';
 import { useToast } from '@/components/common/Toast';
 import { StatusBadge } from '@/components/common/StatusBadge';
 import { formatDateTime } from '@/utils/dateFormat';
 import { generateReportPDF, generateReportContent } from '@/utils/pdfGenerator';
-import type { Report, ReportHistory } from '@/types';
+import type { Report, ReportHistory, ReportComment } from '@/types';
 
 const ACTION_LABELS: Record<ReportHistory['action'], string> = {
   save: '保存报告',
@@ -40,6 +40,9 @@ const ReportDetail: React.FC = () => {
     getTemplateById,
     currentUser,
     updateSampleStage,
+    getCommentsByReportId,
+    addReportComment,
+    resolveReportComment,
   } = useLabStore();
 
   const [report, setReport] = useState<Report | null>(null);
@@ -50,6 +53,10 @@ const ReportDetail: React.FC = () => {
   const [showRejectModal, setShowRejectModal] = useState(false);
   const [rejectReason, setRejectReason] = useState('');
   const [showHistory, setShowHistory] = useState(true);
+  const [showComments, setShowComments] = useState(true);
+  const [newComment, setNewComment] = useState('');
+  const [resolveContent, setResolveContent] = useState('');
+  const [resolvingCommentId, setResolvingCommentId] = useState<string | null>(null);
 
   useEffect(() => {
     if (id) {
@@ -159,6 +166,30 @@ const ReportDetail: React.FC = () => {
     refreshReport();
     showToast('电子章已加盖', 'success');
   };
+
+  const comments = id ? getCommentsByReportId(id) : [];
+  const sortedComments = [...comments].sort(
+    (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+  );
+  const unresolvedCount = sortedComments.filter((c) => !c.resolved).length;
+
+  const handleAddComment = () => {
+    if (!id || !currentUser || !newComment.trim()) return;
+    addReportComment(id, currentUser.id, currentUser.realName, newComment.trim());
+    setNewComment('');
+    showToast('批注已添加', 'success');
+  };
+
+  const handleResolveComment = (commentId: string) => {
+    if (!id || !currentUser || !resolveContent.trim()) return;
+    resolveReportComment(commentId, currentUser.realName, resolveContent.trim());
+    setResolvingCommentId(null);
+    setResolveContent('');
+    showToast('批注已标记为已处理', 'success');
+  };
+
+  const canAddComment = report.status === 'reviewing' || report.status === 'rejected';
+  const canResolveComment = isEditing && currentUser?.role === 'operator';
 
   const handleDownloadPDF = async () => {
     try {
@@ -485,6 +516,133 @@ const ReportDetail: React.FC = () => {
                           </div>
                         )}
                       </div>
+                    </div>
+                  ))
+                )}
+              </div>
+            )}
+          </div>
+
+          <div className="bg-white rounded-xl border border-neutral-200 p-5">
+            <button
+              onClick={() => setShowComments(!showComments)}
+              className="w-full flex items-center justify-between font-semibold text-neutral-800"
+            >
+              <span className="flex items-center space-x-2">
+                <MessageSquare size={16} className="text-primary-500" />
+                <span>批注意见</span>
+                {unresolvedCount > 0 && (
+                  <span className="text-xs bg-danger-500 text-white px-2 py-0.5 rounded-full">
+                    {unresolvedCount} 条待处理
+                  </span>
+                )}
+              </span>
+              <span className="text-xs text-neutral-400">{showComments ? '收起' : '展开'}</span>
+            </button>
+            {showComments && (
+              <div className="mt-4 space-y-4">
+                {canAddComment && currentUser?.role === 'manager' && (
+                  <div className="space-y-2">
+                    <textarea
+                      value={newComment}
+                      onChange={(e) => setNewComment(e.target.value)}
+                      rows={3}
+                      placeholder="添加批注意见..."
+                      className="w-full px-3 py-2 border border-neutral-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent transition-all resize-none"
+                    />
+                    <button
+                      onClick={handleAddComment}
+                      disabled={!newComment.trim()}
+                      className="w-full px-3 py-2 bg-primary-500 text-white text-sm rounded-lg hover:bg-primary-600 transition-colors font-medium disabled:opacity-50 disabled:cursor-not-allowed"
+                    >
+                      添加批注
+                    </button>
+                  </div>
+                )}
+
+                {sortedComments.length === 0 ? (
+                  <p className="text-sm text-neutral-400 text-center py-4">暂无批注</p>
+                ) : (
+                  sortedComments.map((c) => (
+                    <div
+                      key={c.id}
+                      className={`p-3 rounded-lg border ${
+                        c.resolved
+                          ? 'bg-success-50 border-success-200'
+                          : 'bg-warning-50 border-warning-200'
+                      }`}
+                    >
+                      <div className="flex items-center justify-between mb-2">
+                        <div className="flex items-center space-x-2">
+                          <User size={12} className="text-neutral-500" />
+                          <span className="text-xs font-medium text-neutral-700">{c.authorName}</span>
+                        </div>
+                        {c.resolved ? (
+                          <span className="text-xs text-success-600 flex items-center space-x-1">
+                            <CheckCircle2 size={12} />
+                            <span>已处理</span>
+                          </span>
+                        ) : (
+                          <span className="text-xs text-warning-600">待处理</span>
+                        )}
+                      </div>
+                      <p className="text-sm text-neutral-700 mb-2">{c.content}</p>
+                      <p className="text-xs text-neutral-400">{formatDateTime(c.createdAt)}</p>
+
+                      {c.resolved && c.resolvedBy && (
+                        <div className="mt-2 pt-2 border-t border-success-200">
+                          <p className="text-xs text-neutral-500">
+                            <span className="font-medium text-success-600">{c.resolvedBy}</span> 处理于 {formatDateTime(c.resolvedAt!)}
+                          </p>
+                          {c.resolveRemark && (
+                            <p className="text-xs text-neutral-600 mt-1">
+                              处理说明：{c.resolveRemark}
+                            </p>
+                          )}
+                        </div>
+                      )}
+
+                      {!c.resolved && canResolveComment && resolvingCommentId === c.id && (
+                        <div className="mt-3 space-y-2">
+                          <textarea
+                            value={resolveContent}
+                            onChange={(e) => setResolveContent(e.target.value)}
+                            rows={2}
+                            placeholder="填写处理说明..."
+                            className="w-full px-2 py-1.5 border border-neutral-300 rounded text-xs focus:outline-none focus:ring-2 focus:ring-success-500 focus:border-transparent resize-none"
+                          />
+                          <div className="flex space-x-2">
+                            <button
+                              onClick={() => handleResolveComment(c.id)}
+                              disabled={!resolveContent.trim()}
+                              className="flex-1 px-2 py-1 bg-success-500 text-white text-xs rounded hover:bg-success-600 transition-colors disabled:opacity-50"
+                            >
+                              确认处理
+                            </button>
+                            <button
+                              onClick={() => {
+                                setResolvingCommentId(null);
+                                setResolveContent('');
+                              }}
+                              className="px-2 py-1 border border-neutral-300 text-neutral-600 text-xs rounded hover:bg-neutral-50 transition-colors"
+                            >
+                              取消
+                            </button>
+                          </div>
+                        </div>
+                      )}
+
+                      {!c.resolved && canResolveComment && resolvingCommentId !== c.id && (
+                        <button
+                          onClick={() => {
+                            setResolvingCommentId(c.id);
+                            setResolveContent('');
+                          }}
+                          className="mt-2 text-xs text-success-600 hover:text-success-700 font-medium"
+                        >
+                          标记为已处理
+                        </button>
+                      )}
                     </div>
                   ))
                 )}

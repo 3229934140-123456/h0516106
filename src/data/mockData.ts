@@ -1,4 +1,4 @@
-import type { Sample, Template, User, FlowLog, Experiment, ExperimentStep, AbnormalResult, Notification, Report, ReportHistory } from '@/types';
+import type { Sample, Template, User, FlowLog, Experiment, ExperimentStep, AbnormalResult, Notification, Report, ReportHistory, Equipment, CalibrationRecord, ReportComment, SampleRetention, SampleDisposal } from '@/types';
 import { generateId } from '@/utils/trackingNo';
 import { getNowString, getTodayString } from '@/utils/dateFormat';
 
@@ -496,5 +496,150 @@ export const mockReports: Report[] = [
         operatedAt: new Date(Date.now() - 28000000).toISOString(),
       },
     ] as ReportHistory[],
+  },
+];
+
+export const mockEquipments: Equipment[] = [
+  {
+    id: 'equip-1',
+    name: 'pH计',
+    model: 'PHS-3C',
+    serialNo: 'PH-001',
+    status: 'available',
+    lastCalibrationDate: new Date(Date.now() - 30 * 86400000).toISOString().split('T')[0],
+    calibrationDueDate: new Date(Date.now() + 60 * 86400000).toISOString().split('T')[0],
+    location: '仪器室A-01',
+    description: '精密pH计，测量范围0-14',
+  },
+  {
+    id: 'equip-2',
+    name: '浊度仪',
+    model: 'WGZ-2000',
+    serialNo: 'TURB-002',
+    status: 'in_use',
+    lastCalibrationDate: new Date(Date.now() - 15 * 86400000).toISOString().split('T')[0],
+    calibrationDueDate: new Date(Date.now() + 75 * 86400000).toISOString().split('T')[0],
+    location: '仪器室A-02',
+    currentExperimentId: 'exp-1',
+    description: '便携式浊度仪，测量范围0-2000NTU',
+  },
+  {
+    id: 'equip-3',
+    name: '生化培养箱',
+    model: 'LRH-250',
+    serialNo: 'INC-003',
+    status: 'in_use',
+    lastCalibrationDate: new Date(Date.now() - 60 * 86400000).toISOString().split('T')[0],
+    calibrationDueDate: new Date(Date.now() + 30 * 86400000).toISOString().split('T')[0],
+    location: '微生物室B-01',
+    currentExperimentId: 'exp-1',
+    description: '250L生化培养箱，控温范围0-60℃',
+  },
+  {
+    id: 'equip-4',
+    name: '原子吸收分光光度计',
+    model: 'AA-6300',
+    serialNo: 'AA-004',
+    status: 'calibration_due',
+    lastCalibrationDate: new Date(Date.now() - 90 * 86400000).toISOString().split('T')[0],
+    calibrationDueDate: new Date(Date.now() - 5 * 86400000).toISOString().split('T')[0],
+    location: '仪器室A-03',
+    description: '火焰+石墨炉原子吸收，重金属检测',
+  },
+  {
+    id: 'equip-5',
+    name: '高压灭菌锅',
+    model: 'LS-50',
+    serialNo: 'AUTO-005',
+    status: 'maintenance',
+    lastCalibrationDate: new Date(Date.now() - 45 * 86400000).toISOString().split('T')[0],
+    calibrationDueDate: new Date(Date.now() + 45 * 86400000).toISOString().split('T')[0],
+    location: '准备室C-01',
+    description: '50L立式压力蒸汽灭菌器',
+  },
+];
+
+export const mockCalibrationRecords: CalibrationRecord[] = [
+  {
+    id: 'cal-1',
+    equipmentId: 'equip-1',
+    calibratedBy: '市计量院',
+    calibratedAt: new Date(Date.now() - 30 * 86400000).toISOString(),
+    nextDueDate: new Date(Date.now() + 60 * 86400000).toISOString().split('T')[0],
+    result: 'pass',
+    remark: '校准合格，误差在允许范围内',
+    certificateNo: 'JL2024-00123',
+  },
+  {
+    id: 'cal-2',
+    equipmentId: 'equip-2',
+    calibratedBy: '市计量院',
+    calibratedAt: new Date(Date.now() - 15 * 86400000).toISOString(),
+    nextDueDate: new Date(Date.now() + 75 * 86400000).toISOString().split('T')[0],
+    result: 'pass',
+    remark: '校准合格',
+    certificateNo: 'JL2024-00145',
+  },
+  {
+    id: 'cal-3',
+    equipmentId: 'equip-3',
+    calibratedBy: '市计量院',
+    calibratedAt: new Date(Date.now() - 60 * 86400000).toISOString(),
+    nextDueDate: new Date(Date.now() + 30 * 86400000).toISOString().split('T')[0],
+    result: 'pass',
+    remark: '温度偏差±0.3℃，符合要求',
+    certificateNo: 'JL2024-00098',
+  },
+];
+
+export const mockReportComments: ReportComment[] = [
+  {
+    id: 'comment-1',
+    reportId: 'report-1',
+    authorId: 'user-3',
+    authorName: '李经理',
+    content: '请补充检测依据的标准号和版本',
+    resolved: false,
+    createdAt: new Date(Date.now() - 32000000).toISOString(),
+  },
+];
+
+export const mockSampleRetentions: SampleRetention[] = [
+  {
+    id: 'ret-1',
+    sampleId: 'sample-3',
+    location: '留样冷库2号架',
+    container: '棕色玻璃瓶',
+    quantity: '约200g',
+    retentionDate: new Date(Date.now() - 50 * 86400000).toISOString().split('T')[0],
+    expiryDate: new Date(Date.now() + 40 * 86400000).toISOString().split('T')[0],
+    status: 'active',
+    handler: '张实验员',
+    remark: '常温留样，定期检查',
+  },
+  {
+    id: 'ret-2',
+    sampleId: 'sample-5',
+    location: '留样冷库1号架',
+    container: '无菌采样袋',
+    quantity: '约150g',
+    retentionDate: new Date(Date.now() - 80 * 86400000).toISOString().split('T')[0],
+    expiryDate: new Date(Date.now() - 20 * 86400000).toISOString().split('T')[0],
+    status: 'expired',
+    handler: '张实验员',
+    remark: '已到期，待销毁',
+  },
+];
+
+export const mockSampleDisposals: SampleDisposal[] = [
+  {
+    id: 'disp-1',
+    sampleId: 'sample-5',
+    retentionId: 'ret-2',
+    disposalDate: new Date(Date.now() - 10 * 86400000).toISOString().split('T')[0],
+    disposalMethod: '高温高压灭菌后按危废处理',
+    handler: '张实验员',
+    witness: '李经理',
+    remark: '留样期满，按规定销毁',
   },
 ];

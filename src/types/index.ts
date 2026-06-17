@@ -1,10 +1,12 @@
-export type SampleStatus = 'pending' | 'testing' | 'completed' | 'abnormal' | 'archived';
+export type SampleStatus = 'pending' | 'testing' | 'completed' | 'abnormal' | 'archived' | 'retained' | 'destroyed';
 export type ExperimentStage = 'received' | 'preparation' | 'testing' | 'analysis' | 'review' | 'completed';
 export type UserRole = 'admin' | 'operator' | 'manager' | 'client';
 export type SeverityLevel = 'low' | 'medium' | 'high' | 'critical';
 export type ExperimentStatus = 'draft' | 'in_progress' | 'completed';
 export type ReportStatus = 'draft' | 'reviewing' | 'approved' | 'rejected';
 export type NotificationStatus = 'pending' | 'sent' | 'read';
+export type EquipmentStatus = 'available' | 'in_use' | 'maintenance' | 'calibration_due';
+export type RetentionStatus = 'active' | 'expired' | 'destroyed';
 
 export interface Sample {
   id: string;
@@ -139,6 +141,67 @@ export interface User {
   isActive: boolean;
 }
 
+export interface Equipment {
+  id: string;
+  name: string;
+  model: string;
+  serialNo: string;
+  status: EquipmentStatus;
+  lastCalibrationDate: string;
+  calibrationDueDate: string;
+  location: string;
+  currentExperimentId?: string;
+  description: string;
+}
+
+export interface CalibrationRecord {
+  id: string;
+  equipmentId: string;
+  calibratedBy: string;
+  calibratedAt: string;
+  nextDueDate: string;
+  result: 'pass' | 'fail';
+  remark: string;
+  certificateNo?: string;
+}
+
+export interface ReportComment {
+  id: string;
+  reportId: string;
+  authorId: string;
+  authorName: string;
+  content: string;
+  resolved: boolean;
+  resolvedBy?: string;
+  resolvedAt?: string;
+  resolveRemark?: string;
+  createdAt: string;
+}
+
+export interface SampleRetention {
+  id: string;
+  sampleId: string;
+  location: string;
+  container: string;
+  quantity: string;
+  retentionDate: string;
+  expiryDate: string;
+  status: RetentionStatus;
+  handler: string;
+  remark: string;
+}
+
+export interface SampleDisposal {
+  id: string;
+  sampleId: string;
+  retentionId?: string;
+  disposalDate: string;
+  disposalMethod: string;
+  handler: string;
+  witness?: string;
+  remark: string;
+}
+
 export interface DashboardStats {
   totalSamples: number;
   pendingSamples: number;
@@ -171,6 +234,28 @@ export const SAMPLE_STATUS_LABELS: Record<SampleStatus, string> = {
   completed: '已完成',
   abnormal: '异常',
   archived: '已归档',
+  retained: '留样中',
+  destroyed: '已销毁',
+};
+
+export const EQUIPMENT_STATUS_LABELS: Record<EquipmentStatus, string> = {
+  available: '可用',
+  in_use: '使用中',
+  maintenance: '维修中',
+  calibration_due: '校准到期',
+};
+
+export const EQUIPMENT_STATUS_COLORS: Record<EquipmentStatus, string> = {
+  available: 'success',
+  in_use: 'primary',
+  maintenance: 'warning',
+  calibration_due: 'danger',
+};
+
+export const RETENTION_STATUS_LABELS: Record<RetentionStatus, string> = {
+  active: '在存',
+  expired: '已到期',
+  destroyed: '已销毁',
 };
 
 export const SEVERITY_LABELS: Record<SeverityLevel, string> = {
