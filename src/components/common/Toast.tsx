@@ -1,7 +1,9 @@
 import React, { useState, useCallback } from 'react';
 import { CheckCircle, XCircle, AlertTriangle, Info, X } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import { ToastContext, useToast, type Toast, type ToastType } from '@/hooks/useToast';
+import { ToastContext, useToast as useToastHook, type Toast, type ToastType } from '@/hooks/useToast';
+
+export const useToast = useToastHook;
 
 const icons: Record<ToastType, React.ReactNode> = {
   success: <CheckCircle size={20} className="text-success-500" />,

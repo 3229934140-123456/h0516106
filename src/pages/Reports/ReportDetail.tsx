@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { ArrowLeft, Save, Download, Share2, CheckCircle, XCircle, Stamp, Eye, Edit3, FileText } from 'lucide-react';
 import { useLabStore } from '@/store/useLabStore';
@@ -28,7 +28,6 @@ const ReportDetail: React.FC = () => {
   const [editedContent, setEditedContent] = useState('');
   const [editedTitle, setEditedTitle] = useState('');
   const [showPreview, setShowPreview] = useState(false);
-  const previewRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     if (id) {
@@ -124,8 +123,8 @@ const ReportDetail: React.FC = () => {
 
   const handleDownloadPDF = async () => {
     try {
-      if (!sample || !experiment || !previewRef.current) {
-        alert('无法找到相关信息');
+      if (!sample || !experiment) {
+        showToast('无法找到关联样品或实验信息', 'error');
         return;
       }
 
@@ -133,6 +132,9 @@ const ReportDetail: React.FC = () => {
       tempDiv.innerHTML = editedContent;
       tempDiv.style.position = 'absolute';
       tempDiv.style.left = '-9999px';
+      tempDiv.style.top = '0';
+      tempDiv.style.width = '800px';
+      tempDiv.style.background = '#ffffff';
       document.body.appendChild(tempDiv);
 
       const blob = await generateReportPDF(tempDiv, report, sample, experiment, steps);
@@ -146,18 +148,35 @@ const ReportDetail: React.FC = () => {
       a.click();
       document.body.removeChild(a);
       URL.revokeObjectURL(url);
-    } catch (error) {
-      console.error('PDF generation failed:', error);
-      alert('PDF生成失败，请重试');
+
+      showToast('PDF已下载', 'success');
+    } catch (err) {
+      console.error('PDF generation failed:', err);
+      showToast('PDF生成失败，请重试', 'error');
     }
   };
 
-  const handleShare = () => {
+  const handleShare = async () => {
     if (!report.hasElectronicSeal) {
       showToast('请先盖章后再分享报告', 'error');
       return;
     }
-    showToast('报告分享链接已复制到剪贴板', 'success');
+
+    const shareUrl = `${window.location.origin}/reports/${report.id}`;
+    try {
+      await navigator.clipboard.writeText(shareUrl);
+      showToast(`分享链接已复制到剪贴板：${shareUrl}`, 'success');
+    } catch {
+      const textArea = document.createElement('textarea');
+      textArea.value = shareUrl;
+      textArea.style.position = 'fixed';
+      textArea.style.left = '-9999px';
+      document.body.appendChild(textArea);
+      textArea.select();
+      document.execCommand('copy');
+      document.body.removeChild(textArea);
+      showToast(`分享链接已复制到剪贴板：${shareUrl}`, 'success');
+    }
   };
 
   const canEdit = report.status === 'draft' || report.status === 'rejected';
@@ -298,15 +317,18 @@ const ReportDetail: React.FC = () => {
                   <span>盖电子章</span>
                 </button>
               )}
-              {report.hasElectronicSeal && (
-                <button
-                  onClick={handleShare}
-                  className="px-4 py-2 bg-primary-500 text-white rounded-lg hover:bg-primary-600 transition-colors font-medium flex items-center space-x-2 shadow-lg shadow-primary-500/20"
-                >
-                  <Share2 size={16} />
-                  <span>分享</span>
-                </button>
-              )}
+              <button
+                onClick={handleShare}
+                className={`px-4 py-2 rounded-lg transition-colors font-medium flex items-center space-x-2 ${
+                  report.hasElectronicSeal
+                    ? 'bg-primary-500 text-white hover:bg-primary-600 shadow-lg shadow-primary-500/20'
+                    : 'border border-neutral-300 text-neutral-400 hover:bg-neutral-50 cursor-not-allowed'
+                }`}
+                title={report.hasElectronicSeal ? '复制分享链接' : '请先盖章后再分享'}
+              >
+                <Share2 size={16} />
+                <span>分享</span>
+              </button>
             </>
           )}
         </div>
@@ -390,7 +412,6 @@ const ReportDetail: React.FC = () => {
                 <h3 className="font-semibold text-neutral-800">报告预览</h3>
               </div>
               <div
-                ref={previewRef}
                 className="p-6 max-h-[800px] overflow-auto bg-neutral-50"
                 dangerouslySetInnerHTML={{ __html: editedContent }}
               />

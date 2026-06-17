@@ -7,6 +7,7 @@ import { useAutoSave } from '@/hooks/useAutoSave';
 import { StatusBadge } from '@/components/common/StatusBadge';
 import { formatDateTime } from '@/utils/dateFormat';
 import { generateReportContent } from '@/utils/pdfGenerator';
+import { checkAbnormal } from '@/utils/validator';
 import type { ExperimentStep, TemplateStep } from '@/types';
 
 const ExperimentDetail: React.FC = () => {
@@ -42,7 +43,20 @@ const ExperimentDetail: React.FC = () => {
   };
 
   const saveStep = (stepId: string, updates: Partial<ExperimentStep>) => {
-    setLocalSteps(prev => prev.map(s => s.id === stepId ? { ...s, ...updates } : s));
+    setLocalSteps(prev => prev.map(s => {
+      if (s.id !== stepId) return s;
+      const updated = { ...s, ...updates };
+      if (updates.result !== undefined && updates.result !== s.result) {
+        const templateStep = getTemplateStep(s.stepOrder);
+        if (templateStep) {
+          updated.isAbnormal = checkAbnormal(updates.result, templateStep);
+          if (updated.isAbnormal && experiment) {
+            checkAndCreateAbnormal(s.id, updates.result, templateStep.id, experiment.sampleId);
+          }
+        }
+      }
+      return updated;
+    }));
   };
 
   const { saveStatus, lastSaved, forceSave } = useAutoSave(
@@ -56,14 +70,8 @@ const ExperimentDetail: React.FC = () => {
             parameters: step.parameters,
             observation: step.observation,
             result: step.result,
+            isAbnormal: step.isAbnormal,
           });
-
-          if (step.result && originalStep.result !== step.result) {
-            const templateStep = getTemplateStep(step.stepOrder);
-            if (templateStep && experiment) {
-              checkAndCreateAbnormal(step.id, step.result, templateStep.id, experiment.sampleId);
-            }
-          }
         }
       });
     },

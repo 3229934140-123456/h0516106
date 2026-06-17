@@ -76,6 +76,9 @@ const ReportList: React.FC = () => {
       tempDiv.innerHTML = report.content;
       tempDiv.style.position = 'absolute';
       tempDiv.style.left = '-9999px';
+      tempDiv.style.top = '0';
+      tempDiv.style.width = '800px';
+      tempDiv.style.background = '#ffffff';
       document.body.appendChild(tempDiv);
 
       const blob = await generateReportPDF(tempDiv, report, sample, experiment, steps);
@@ -89,18 +92,33 @@ const ReportList: React.FC = () => {
       a.click();
       document.body.removeChild(a);
       URL.revokeObjectURL(url);
-    } catch (error) {
-      console.error('PDF generation failed:', error);
+    } catch (err) {
+      console.error('PDF generation failed:', err);
       alert('PDF生成失败，请重试');
     }
   };
 
-  const handleShare = (report: Report) => {
+  const handleShare = async (report: Report) => {
     if (!report.hasElectronicSeal) {
       alert('请先盖章后再分享报告');
       return;
     }
-    alert('报告分享链接已复制到剪贴板');
+
+    const shareUrl = `${window.location.origin}/reports/${report.id}`;
+    try {
+      await navigator.clipboard.writeText(shareUrl);
+      alert(`分享链接已复制到剪贴板：\n${shareUrl}`);
+    } catch {
+      const textArea = document.createElement('textarea');
+      textArea.value = shareUrl;
+      textArea.style.position = 'fixed';
+      textArea.style.left = '-9999px';
+      document.body.appendChild(textArea);
+      textArea.select();
+      document.execCommand('copy');
+      document.body.removeChild(textArea);
+      alert(`分享链接已复制到剪贴板：\n${shareUrl}`);
+    }
   };
 
   const columns: Column<Report>[] = [

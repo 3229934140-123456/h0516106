@@ -143,10 +143,11 @@ export const useLabStore = create<LabState>((set, get) => ({
   },
 
   addSample: (sampleData) => {
+    const existingTrackingNos = new Set(get().samples.map(s => s.trackingNo));
     const newSample: Sample = {
       ...sampleData,
       id: generateId(),
-      trackingNo: generateTrackingNo(),
+      trackingNo: generateTrackingNo(existingTrackingNos),
       status: 'pending',
       currentStage: 'received',
       createdAt: getNowString(),
