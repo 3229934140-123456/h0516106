@@ -57,6 +57,7 @@ const ReportDetail: React.FC = () => {
   const [newComment, setNewComment] = useState('');
   const [resolveContent, setResolveContent] = useState('');
   const [resolvingCommentId, setResolvingCommentId] = useState<string | null>(null);
+  const [resolvedInThisEdit, setResolvedInThisEdit] = useState<Set<string>>(new Set());
 
   useEffect(() => {
     if (id) {
@@ -107,6 +108,7 @@ const ReportDetail: React.FC = () => {
   const handleStartEdit = () => {
     if (!id || !currentUser) return;
     addReportHistory(id, 'edit', currentUser.realName);
+    setResolvedInThisEdit(new Set());
     setIsEditing(true);
   };
 
@@ -119,8 +121,33 @@ const ReportDetail: React.FC = () => {
 
   const handleSubmitReview = () => {
     if (!id || !currentUser) return;
+
+    const lastSubmitTime = [...(report.history || [])]
+      .filter(h => h.action === 'submit')
+      .sort((a, b) => new Date(b.operatedAt).getTime() - new Date(a.operatedAt).getTime())[0]?.operatedAt;
+
+    const newlyResolved = comments.filter(c => {
+      if (!c.resolved) return false;
+      if (resolvedInThisEdit.has(c.id)) return true;
+      if (lastSubmitTime && c.resolvedAt) {
+        return new Date(c.resolvedAt).getTime() > new Date(lastSubmitTime).getTime();
+      }
+      return false;
+    });
+
+    let submitRemark: string | undefined;
+    if (newlyResolved.length > 0) {
+      const items = newlyResolved.map((c, idx) => {
+        const line1 = `${idx + 1}. 批注：${c.content}（${c.authorName}）`;
+        const line2 = `   处理说明：${c.resolveRemark || '已修改'}`;
+        return `${line1}\n${line2}`;
+      });
+      submitRemark = `本次处理批注 ${newlyResolved.length} 条：\n${items.join('\n')}`;
+    }
+
     updateReport(id, { status: 'reviewing', title: editedTitle, content: editedContent });
-    addReportHistory(id, 'submit', currentUser.realName);
+    addReportHistory(id, 'submit', currentUser.realName, submitRemark);
+    setResolvedInThisEdit(new Set());
     refreshReport();
     showToast('报告已提交审核', 'success');
   };
@@ -183,6 +210,7 @@ const ReportDetail: React.FC = () => {
   const handleResolveComment = (commentId: string) => {
     if (!id || !currentUser || !resolveContent.trim()) return;
     resolveReportComment(commentId, currentUser.realName, resolveContent.trim());
+    setResolvedInThisEdit(prev => new Set(prev).add(commentId));
     setResolvingCommentId(null);
     setResolveContent('');
     showToast('批注已标记为已处理', 'success');

@@ -1,5 +1,5 @@
-import React, { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import React, { useState, useEffect } from 'react';
+import { useNavigate, useLocation } from 'react-router-dom';
 import { ArrowLeft, Save, FileText, FlaskConical } from 'lucide-react';
 import { useLabStore } from '@/store/useLabStore';
 import { useToast } from '@/components/common/Toast';
@@ -8,8 +8,10 @@ import type { Sample, Template } from '@/types';
 
 const ExperimentNew: React.FC = () => {
   const navigate = useNavigate();
+  const location = useLocation();
+  const routeState = location.state as { sampleId?: string; sampleName?: string } | null;
   const { showToast } = useToast();
-  const { samples, templates, currentUser, createExperimentFromTemplate, updateSampleStage } = useLabStore();
+  const { samples, templates, currentUser, createExperimentFromTemplate, updateSampleStage, getSampleById } = useLabStore();
   
   const [formData, setFormData] = useState({
     trackingNo: '',
@@ -21,6 +23,23 @@ const ExperimentNew: React.FC = () => {
   const [selectedSample, setSelectedSample] = useState<Sample | null>(null);
   const [selectedTemplate, setSelectedTemplate] = useState<Template | null>(null);
   const [errors, setErrors] = useState<Record<string, string>>({});
+
+  useEffect(() => {
+    if (routeState?.sampleId) {
+      const sample = getSampleById(routeState.sampleId);
+      if (sample) {
+        setSelectedSample(sample);
+        setFormData(prev => ({
+          ...prev,
+          sampleId: sample.id,
+          trackingNo: sample.trackingNo,
+          title: routeState.sampleName
+            ? `${routeState.sampleName} - 实验`
+            : `${sample.name} - 实验`,
+        }));
+      }
+    }
+  }, [routeState, getSampleById]);
 
   const handleScanComplete = (value: string) => {
     const sample = samples.find(s => s.trackingNo === value);
@@ -45,11 +64,12 @@ const ExperimentNew: React.FC = () => {
   const handleTemplateSelect = (templateId: string) => {
     const template = templates.find(t => t.id === templateId && t.isActive);
     if (template) {
+      const sampleName = selectedSample?.name || routeState?.sampleName || '样品';
       setSelectedTemplate(template);
       setFormData({ 
         ...formData, 
         templateId, 
-        title: `${selectedSample?.name || '样品'} - ${template.name}` 
+        title: `${sampleName} - ${template.name}` 
       });
       setErrors({ ...errors, templateId: '' });
     }

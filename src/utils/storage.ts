@@ -1,4 +1,4 @@
-import type { Sample, FlowLog, Experiment, ExperimentStep, Template, Report, AbnormalResult, Notification, User } from '@/types';
+import type { Sample, FlowLog, Experiment, ExperimentStep, Template, Report, AbnormalResult, Notification, User, Equipment, CalibrationRecord, ReportComment, SampleRetention, SampleDisposal } from '@/types';
 
 const STORAGE_KEYS = {
   SAMPLES: 'lab_samples',
@@ -12,6 +12,11 @@ const STORAGE_KEYS = {
   USERS: 'lab_users',
   CURRENT_USER: 'lab_current_user',
   INITIALIZED: 'lab_initialized',
+  EQUIPMENTS: 'lab_equipments',
+  CALIBRATION_RECORDS: 'lab_calibration_records',
+  REPORT_COMMENTS: 'lab_report_comments',
+  SAMPLE_RETENTIONS: 'lab_sample_retentions',
+  SAMPLE_DISPOSALS: 'lab_sample_disposals',
 };
 
 export function getFromStorage<T>(key: string, defaultValue: T): T {
@@ -113,6 +118,46 @@ export function isInitialized(): boolean {
 
 export function markInitialized(): void {
   setToStorage(STORAGE_KEYS.INITIALIZED, true);
+}
+
+export function getEquipments(): Equipment[] {
+  return getFromStorage<Equipment[]>(STORAGE_KEYS.EQUIPMENTS, []);
+}
+
+export function setEquipments(equipments: Equipment[]): void {
+  setToStorage(STORAGE_KEYS.EQUIPMENTS, equipments);
+}
+
+export function getCalibrationRecords(): CalibrationRecord[] {
+  return getFromStorage<CalibrationRecord[]>(STORAGE_KEYS.CALIBRATION_RECORDS, []);
+}
+
+export function setCalibrationRecords(records: CalibrationRecord[]): void {
+  setToStorage(STORAGE_KEYS.CALIBRATION_RECORDS, records);
+}
+
+export function getReportComments(): ReportComment[] {
+  return getFromStorage<ReportComment[]>(STORAGE_KEYS.REPORT_COMMENTS, []);
+}
+
+export function setReportComments(comments: ReportComment[]): void {
+  setToStorage(STORAGE_KEYS.REPORT_COMMENTS, comments);
+}
+
+export function getSampleRetentions(): SampleRetention[] {
+  return getFromStorage<SampleRetention[]>(STORAGE_KEYS.SAMPLE_RETENTIONS, []);
+}
+
+export function setSampleRetentions(retentions: SampleRetention[]): void {
+  setToStorage(STORAGE_KEYS.SAMPLE_RETENTIONS, retentions);
+}
+
+export function getSampleDisposals(): SampleDisposal[] {
+  return getFromStorage<SampleDisposal[]>(STORAGE_KEYS.SAMPLE_DISPOSALS, []);
+}
+
+export function setSampleDisposals(disposals: SampleDisposal[]): void {
+  setToStorage(STORAGE_KEYS.SAMPLE_DISPOSALS, disposals);
 }
 
 export { STORAGE_KEYS };

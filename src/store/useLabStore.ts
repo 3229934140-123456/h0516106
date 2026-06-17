@@ -1,7 +1,7 @@
 import { create } from 'zustand';
 import type {
   Sample, FlowLog, Experiment, ExperimentStep, Template, Report, ReportHistory, AbnormalResult, Notification, User, DashboardStats, ExperimentStage, Equipment, CalibrationRecord, ReportComment, SampleRetention, SampleDisposal } from '@/types';
-import { getSamples, setSamples, getFlowLogs, setFlowLogs, getExperiments, setExperiments, getExperimentSteps, setExperimentSteps, getTemplates, setTemplates, getReports, setReports, getAbnormalResults, setAbnormalResults, getNotifications, setNotifications, getUsers, setUsers, getCurrentUser, setCurrentUser, isInitialized, markInitialized } from '@/utils/storage';
+import { getSamples, setSamples, getFlowLogs, setFlowLogs, getExperiments, setExperiments, getExperimentSteps, setExperimentSteps, getTemplates, setTemplates, getReports, setReports, getAbnormalResults, setAbnormalResults, getNotifications, setNotifications, getUsers, setUsers, getCurrentUser, setCurrentUser, isInitialized, markInitialized, getEquipments, setEquipments, getCalibrationRecords, setCalibrationRecords, getReportComments, setReportComments, getSampleRetentions, setSampleRetentions, getSampleDisposals, setSampleDisposals } from '@/utils/storage';
 import { generateId, generateTrackingNo } from '@/utils/trackingNo';
 import { getNowString, getTodayString } from '@/utils/dateFormat';
 import { checkAbnormal, getSeverity, getAbnormalDescription } from '@/utils/validator';
@@ -118,11 +118,11 @@ export const useLabStore = create<LabState>((set, get) => ({
         notifications: getNotifications(),
         users: getUsers(),
         currentUser: getCurrentUser(),
-        equipments: mockEquipments,
-        calibrationRecords: mockCalibrationRecords,
-        reportComments: mockReportComments,
-        sampleRetentions: mockSampleRetentions,
-        sampleDisposals: mockSampleDisposals,
+        equipments: getEquipments(),
+        calibrationRecords: getCalibrationRecords(),
+        reportComments: getReportComments(),
+        sampleRetentions: getSampleRetentions(),
+        sampleDisposals: getSampleDisposals(),
         initialized: true,
       });
       return;
@@ -140,6 +140,11 @@ export const useLabStore = create<LabState>((set, get) => ({
     setNotifications(mockNotifications);
     setUsers(mockUsers);
     setCurrentUser(mockUsers[1]);
+    setEquipments(mockEquipments);
+    setCalibrationRecords(mockCalibrationRecords);
+    setReportComments(mockReportComments);
+    setSampleRetentions(mockSampleRetentions);
+    setSampleDisposals(mockSampleDisposals);
 
     markInitialized();
 
@@ -374,6 +379,7 @@ export const useLabStore = create<LabState>((set, get) => ({
       createdAt: getNowString(),
     };
     const reportComments = [...get().reportComments, newComment];
+    setReportComments(reportComments);
     set({ reportComments });
     return newComment;
   },
@@ -388,6 +394,7 @@ export const useLabStore = create<LabState>((set, get) => ({
         resolveRemark,
       } : c
     );
+    setReportComments(reportComments);
     set({ reportComments });
   },
 
@@ -552,6 +559,7 @@ export const useLabStore = create<LabState>((set, get) => ({
       id: generateId(),
     };
     const sampleRetentions = [...get().sampleRetentions, newRetention];
+    setSampleRetentions(sampleRetentions);
     set({ sampleRetentions });
 
     const sample = get().getSampleById(retentionData.sampleId);
@@ -566,6 +574,7 @@ export const useLabStore = create<LabState>((set, get) => ({
     const sampleRetentions = get().sampleRetentions.map(r =>
       r.id === id ? { ...r, ...updates } : r
     );
+    setSampleRetentions(sampleRetentions);
     set({ sampleRetentions });
   },
 
@@ -580,6 +589,7 @@ export const useLabStore = create<LabState>((set, get) => ({
       id: generateId(),
     };
     const sampleDisposals = [...get().sampleDisposals, newDisposal];
+    setSampleDisposals(sampleDisposals);
     set({ sampleDisposals });
 
     const sample = get().getSampleById(disposalData.sampleId);
